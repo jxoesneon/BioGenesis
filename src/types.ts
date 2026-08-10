@@ -57,6 +57,9 @@ export interface ThemeColors {
   blood: number;
 }
 
+export type OrganPipelineType = 'BIO_PLASMA' | 'HEMOLYMPH' | 'NERVOUS' | 'LIFE_SUPPORT' | 'ARMOR_DEFENSE';
+export type OrganPipelineRole = 'GENERATION' | 'STORAGE' | 'DISTRIBUTION' | 'EFFECTOR' | 'INTERFACE' | 'STRUCTURAL' | 'DEFENSE' | 'REPAIR';
+
 export interface TargetNodeInfo {
   name: string;
   category?: string;
@@ -74,11 +77,31 @@ export interface TargetNodeInfo {
   minFreeSpace?: string;
   habitationVolume?: string;
   crewCapacity?: string;
+
+  // Cyber-Organic Bio-Telemetry Extensions
+  speciesClass?: string;
+  neuralSyncCoherence?: string;
+  hemolymphStrokePressure?: string;
+  photosyntheticO2Yield?: string;
+  naniteCoagulationVelocity?: string;
+  radiotrophicAbsorption?: string;
+  siphonThrustImpulse?: string;
+  biomechanicalLore?: string;
+
+  // Closed-Loop Organ Pipeline Graph Fields
+  pipeline?: OrganPipelineType;
+  role?: OrganPipelineRole;
+  upstreamNodeName?: string;
+  downstreamNodeNames?: string[];
+  operatingPressure?: string;
+  outputCapacity?: string;
 }
 
 export interface PresetOption {
   id: string;
   name: string;
+  speciesClass: string;
+  lore: string;
   config: Partial<AppState>;
 }
 

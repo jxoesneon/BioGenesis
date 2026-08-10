@@ -13,6 +13,8 @@ export const presets: PresetOption[] = [
   {
     id: 'leviathan',
     name: 'Apex Hive Leviathan',
+    speciesClass: 'Abyssocetus apex',
+    lore: 'Titan-class habitat carrier housing multi-tiered crew chambers lined with photosynthetic bio-moss. Fueled by heavy copper-hemocyanin peristaltic hearts.',
     config: {
       length: 22, segments: 16, thoraxWidth: 3.8, plateCoverage: 90,
       tentaclePairs: 10, ribSpines: 28, eyePods: 6, sporeSacs: 10, bioThrusters: 5,
@@ -23,6 +25,8 @@ export const presets: PresetOption[] = [
   {
     id: 'interceptor',
     name: 'Neuro-Spore Interceptor',
+    speciesClass: 'Neuro-Spore interceptor',
+    lore: 'Vanguard-class strike symbiont linked to a single pilot via graphene neural thread plugs. Ultra-fast reflex vectoring with exothermal gas jet siphons.',
     config: {
       length: 8, segments: 6, thoraxWidth: 1.4, plateCoverage: 60,
       tentaclePairs: 2, ribSpines: 8, eyePods: 2, sporeSacs: 2, bioThrusters: 2,
@@ -33,6 +37,8 @@ export const presets: PresetOption[] = [
   {
     id: 'dreadnought',
     name: 'Chitinous Void Harvester',
+    speciesClass: 'Harvester chitinous',
+    lore: 'Mining dreadnought engineered with mineral-accumulated chitin armor plates. Grazes on asteroid belts to refine heavy metals for fleet shell synthesis.',
     config: {
       length: 18, segments: 14, thoraxWidth: 4.2, plateCoverage: 100,
       tentaclePairs: 4, ribSpines: 32, eyePods: 8, sporeSacs: 12, bioThrusters: 6,
@@ -43,6 +49,8 @@ export const presets: PresetOption[] = [
   {
     id: 'parasite',
     name: 'Abyssal Symbiont Frigate',
+    speciesClass: 'Symbiont abyssalis',
+    lore: 'Deep-space stealth frigate equipped with active chromatophore skin and thermal spiracle dampening to blend into cosmic microwave background radiation.',
     config: {
       length: 11, segments: 8, thoraxWidth: 1.8, plateCoverage: 40,
       tentaclePairs: 12, ribSpines: 12, eyePods: 4, sporeSacs: 8, bioThrusters: 1,
@@ -53,6 +61,8 @@ export const presets: PresetOption[] = [
   {
     id: 'spore',
     name: 'Viral Colony Carrier',
+    speciesClass: 'Colony carrier-spore',
+    lore: 'Fleet brood mother dispensing repair bio-nanites and defensive spore screens. Houses high-capacity bio-moss oxygenating chambers.',
     config: {
       length: 15, segments: 12, thoraxWidth: 3.0, plateCoverage: 75,
       tentaclePairs: 8, ribSpines: 20, eyePods: 4, sporeSacs: 12, bioThrusters: 4,
