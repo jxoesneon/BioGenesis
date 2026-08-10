@@ -1,0 +1,6 @@
+{
+  "name": "3D Biopunk Procedural Spaceship Builder",
+  "description": "3D Biopunk procedural spaceship builder powered by a NURBS surface generator, real-time bio-telemetry, procedural genetics, web audio synthesis, and 3D OBJ model export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
