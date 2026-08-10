@@ -53,6 +53,11 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
   const mass = Math.round(state.length * state.segments * state.thoraxWidth * 85);
   const bpm = Math.round(50 + state.neuralNodes * 1.5);
   const thrust = state.bioThrusters * 340;
+  const neuralSync = Math.min(99.9, 92.0 + state.neuralNodes * 0.55).toFixed(1);
+  const hemolymphPress = (11.5 + state.vascularDensity * 0.65).toFixed(1);
+  const o2Yield = Math.round(state.habitatChambers * 95 + state.spiracleCount * 15);
+  const naniteRepair = (0.75 + state.plateOverlap * 0.12).toFixed(2);
+  const gammaAbs = Math.round(state.plateCoverage * 0.65 + 15);
 
   const numCrossU = state.segments + 1;
   const numCrossV = 8;
@@ -132,20 +137,28 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
 
       <div className="grid grid-cols-2 gap-2 text-center">
         <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
-          <span className="text-[10px] text-cyan-400 block uppercase">Organism Mass</span>
-          <span className="text-sm font-mono font-bold text-cyan-300">{mass.toLocaleString()} MT</span>
+          <span className="text-[10px] text-cyan-400 block uppercase">Neuro-Sync Coherence</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{neuralSync}%</span>
         </div>
         <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
-          <span className="text-[10px] text-cyan-400 block uppercase">Heart Rate</span>
-          <span className="text-sm font-mono font-bold text-cyan-300">{bpm} BPM</span>
+          <span className="text-[10px] text-cyan-400 block uppercase">Hemolymph Stroke</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{hemolymphPress} Bar</span>
         </div>
         <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
-          <span className="text-[10px] text-cyan-400 block uppercase">Bio-Thrust Power</span>
+          <span className="text-[10px] text-cyan-400 block uppercase">Bio-Moss O₂ Production</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{o2Yield} L/min</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Nanite Coagulation</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{naniteRepair} m³/s</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Radiotrophic Gamma Abs</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{gammaAbs} Gy/hr</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Hydro-Pulse Thrust</span>
           <span className="text-sm font-mono font-bold text-cyan-300">{thrust} kN</span>
-        </div>
-        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
-          <span className="text-[10px] text-cyan-400 block uppercase">Spline Continuity</span>
-          <span className="text-sm font-mono font-bold text-cyan-300">C{state.nurbsDegree - 1} Continuous</span>
         </div>
       </div>
 
@@ -210,6 +223,38 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
                 </span>
               </div>
             </div>
+
+        {/* Closed-Loop Organ Pipeline Graph Inspector */}
+        {targetNode.pipeline && (
+          <div className="mt-2 p-2 bg-cyan-950/60 rounded border border-cyan-500/40 space-y-1.5 text-[10px] font-mono shadow-[0_0_10px_rgba(6,182,212,0.15)]">
+            <div className="flex justify-between items-center">
+              <span className="text-cyan-300 uppercase font-bold text-[9px] flex items-center gap-1">
+                <Activity className="w-3.5 h-3.5 text-cyan-400" /> Pipeline Topology: {targetNode.pipeline.replace('_', ' ')}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-cyan-900/80 text-cyan-200 text-[8px] font-bold uppercase border border-cyan-400/40">
+                {targetNode.role}
+              </span>
+            </div>
+            {targetNode.upstreamNodeName && (
+              <div className="flex justify-between text-cyan-300">
+                <span className="text-cyan-500">Upstream Source:</span>
+                <span className="text-cyan-300 font-semibold">{targetNode.upstreamNodeName}</span>
+              </div>
+            )}
+            {targetNode.downstreamNodeNames && targetNode.downstreamNodeNames.length > 0 && (
+              <div className="flex justify-between text-cyan-300">
+                <span className="text-cyan-500">Downstream Targets:</span>
+                <span className="text-cyan-300 font-semibold">{targetNode.downstreamNodeNames.join(', ')}</span>
+              </div>
+            )}
+            {targetNode.operatingPressure && (
+              <div className="flex justify-between text-cyan-300">
+                <span className="text-cyan-500">Operating Pressure:</span>
+                <span className="text-cyan-300 font-semibold">{targetNode.operatingPressure}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Human Habitation Sac Details (if applicable) */}
         {(targetNode.habitationVolume || targetNode.crewCapacity) && (
