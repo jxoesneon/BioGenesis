@@ -456,27 +456,179 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       }
     }
 
-    // 3. CENTRAL PULSATING BIO-HEART ENGINE
+    // 3. CENTRAL ORGAN SYSTEM PIPELINE TOPOLOGY NODES & CONDUITS
     const midIdx = Math.floor(spineNodes.length / 2);
     const heartNode = spineNodes[midIdx] || spineNodes[0];
+    const headNode = spineNodes[0];
+
+    // Pipeline 1: Bio-Plasma Energy & Propulsion System
+    const plasmaGlandGeo = new THREE.DodecahedronGeometry(heartNode.radius * 0.55, 1);
+    const plasmaGlandMesh = new THREE.Mesh(plasmaGlandGeo, mats.glowNode);
+    plasmaGlandMesh.position.set(0, heartNode.y - 1.2, heartNode.z + 3.0);
+    plasmaGlandMesh.userData = {
+      name: 'Bio-Plasma Electrolysis Gland',
+      category: 'Bio-Plasma System',
+      desc: 'Thoracic organ electrolyzing ingested comet ice into reactive hydrogen plasma fuel.',
+      metabolicRate: '850 kW Electrolysis Rate',
+      enzymaticPressure: '140 Bar Fuel Buffer',
+      pipeline: 'BIO_PLASMA',
+      role: 'GENERATION',
+      downstreamNodeNames: ['Muscular Plasma Bladder Reservoir'],
+      operatingPressure: '140 Bar',
+    };
+    shipGroup.add(plasmaGlandMesh);
+
+    const plasmaBladderGeo = new THREE.IcosahedronGeometry(heartNode.radius * 0.7, 2);
+    const plasmaBladderMesh = new THREE.Mesh(plasmaBladderGeo, mats.sporeSac);
+    plasmaBladderMesh.position.set(0, heartNode.y - 0.8, heartNode.z + 1.2);
+    plasmaBladderMesh.userData = {
+      name: 'Muscular Plasma Bladder Reservoir',
+      category: 'Bio-Plasma System',
+      desc: 'Pressurized bio-fuel reservoir storing high-energy plasma fuel under heavy sphincter tension.',
+      metabolicRate: '140 Bar Hydro-Pressure',
+      pipeline: 'BIO_PLASMA',
+      role: 'STORAGE',
+      upstreamNodeName: 'Bio-Plasma Electrolysis Gland',
+      downstreamNodeNames: ['Primary Plasma Highway Trunk', 'Bio-Plasma Vent Nozzles'],
+      operatingPressure: '140 Bar',
+    };
+    shipGroup.add(plasmaBladderMesh);
+
+    // 3D Bio-Plasma Feed Conduit Tube
+    const plasmaTubeCurve = new THREE.CatmullRomCurve3([
+      plasmaGlandMesh.position,
+      plasmaBladderMesh.position,
+      new THREE.Vector3(0, heartNode.y - 0.5, heartNode.z - 3.0),
+      new THREE.Vector3(0, heartNode.y - 0.4, spineNodes[spineNodes.length - 1].z)
+    ]);
+    const plasmaTubeGeo = new THREE.TubeGeometry(plasmaTubeCurve, 32, 0.18, 8, false);
+    const plasmaTubeMesh = new THREE.Mesh(plasmaTubeGeo, mats.vascularVein);
+    plasmaTubeMesh.userData = {
+      name: 'Primary Plasma Highway Conduit Trunk',
+      category: 'Bio-Plasma Conduit',
+      pipeline: 'BIO_PLASMA',
+      role: 'DISTRIBUTION',
+      upstreamNodeName: 'Muscular Plasma Bladder Reservoir',
+      downstreamNodeNames: ['Bio-Plasma Vent Nozzles'],
+      operatingPressure: '140 Bar',
+    };
+    shipGroup.add(plasmaTubeMesh);
+
+    // Pipeline 2: Hemolymph Circulation System
     const heartGeo = new THREE.IcosahedronGeometry(heartNode.radius * 0.65, 2);
     const heartMesh = new THREE.Mesh(heartGeo, mats.heartCore);
     heartMesh.position.set(0, heartNode.y, heartNode.z);
     heartMesh.userData = {
       name: 'Aorta Bioluminescent Central Engine (Heart)',
       category: 'Circulatory Core',
-      desc: 'Triple-chambered central hydraulic pump generating bio-plasma fluid pressure.',
+      desc: 'Triple-chambered central hydraulic pump generating copper-hemocyanin blood pressure.',
       metabolicRate: '98% Primary Energy Flux',
       neuralFreq: `${Math.round(50 + state.neuralNodes * 1.5)} BPM Sync`,
       enzymaticPressure: '14.8 bar Hydraulic Stroke',
-      vascularDemand: '840 mL/min Central Output',
-      vascularFlowSupply: 'Aorta Primary Pump Core',
-      connectedVeinBranch: 'Heart Chamber Zero',
-      supportStatus: '100% Core Source',
-      requiredFluid: 'Bio-Plasma Haemolymph',
+      pipeline: 'HEMOLYMPH',
+      role: 'GENERATION',
+      downstreamNodeNames: ['Hemolymph Atrium Reservoir', 'Central Aorta Highway'],
+      operatingPressure: '18.5 Bar',
     };
     shipGroup.add(heartMesh);
     animatedHeartRef.current = heartMesh;
+
+    const atriumGeo = new THREE.OctahedronGeometry(heartNode.radius * 0.5, 1);
+    const atriumMesh = new THREE.Mesh(atriumGeo, mats.heartCore);
+    atriumMesh.position.set(0, heartNode.y + 0.6, heartNode.z + 0.8);
+    atriumMesh.userData = {
+      name: 'Hemolymph Atrium Reservoir',
+      category: 'Circulatory Core',
+      desc: 'Sub-dorsal cardiac atrium buffering copper-hemocyanin blood pressure during maneuver spikes.',
+      pipeline: 'HEMOLYMPH',
+      role: 'STORAGE',
+      upstreamNodeName: 'Aorta Bioluminescent Central Engine (Heart)',
+      downstreamNodeNames: ['Central Aorta Highway'],
+      operatingPressure: '18.5 Bar',
+    };
+    shipGroup.add(atriumMesh);
+
+    // Pipeline 3: Nervous & Cybernetic Synaptic System
+    const brainGeo = new THREE.IcosahedronGeometry(headNode.radius * 0.6, 2);
+    const brainMesh = new THREE.Mesh(brainGeo, mats.glowNode);
+    brainMesh.position.set(0, headNode.y + 0.8, headNode.z - 0.5);
+    brainMesh.userData = {
+      name: 'Primary Ganglion Brain Core',
+      category: 'Nervous Subsystem',
+      desc: 'Central bio-cognitive intelligence core coordinating autonomous ship systems.',
+      neuralFreq: '98.4% Synaptic Coherence',
+      pipeline: 'NERVOUS',
+      role: 'GENERATION',
+      downstreamNodeNames: ['Human Neuro-Link Interface Pod', 'Spinal Axon Cord Highway'],
+      operatingPressure: '8.8 Bar Bio-Electric',
+    };
+    shipGroup.add(brainMesh);
+
+    const neuroLinkGeo = new THREE.CylinderGeometry(0.3, 0.35, 0.4, 8);
+    const neuroLinkMesh = new THREE.Mesh(neuroLinkGeo, mats.carapace);
+    neuroLinkMesh.position.set(0, headNode.y + 0.4, headNode.z - 1.2);
+    neuroLinkMesh.userData = {
+      name: 'Human Neuro-Link Interface Pod',
+      category: 'Nervous Subsystem',
+      desc: 'Graphene conductive socket interfacing human pilot neural implants directly into the spinal ganglion.',
+      pipeline: 'NERVOUS',
+      role: 'INTERFACE',
+      upstreamNodeName: 'Primary Ganglion Brain Core',
+      downstreamNodeNames: ['Spinal Axon Cord Highway'],
+    };
+    shipGroup.add(neuroLinkMesh);
+
+    // 3D Spinal Axon Nerve Cord Tube
+    const axonCurve = new THREE.CatmullRomCurve3([
+      brainMesh.position,
+      neuroLinkMesh.position,
+      new THREE.Vector3(0, heartNode.y + 0.5, heartNode.z),
+      new THREE.Vector3(0, spineNodes[spineNodes.length - 1].y + 0.4, spineNodes[spineNodes.length - 1].z)
+    ]);
+    const axonTubeGeo = new THREE.TubeGeometry(axonCurve, 32, 0.12, 8, false);
+    const axonTubeMesh = new THREE.Mesh(axonTubeGeo, mats.glowNode);
+    axonTubeMesh.userData = {
+      name: 'Spinal Axon Cord Highway',
+      category: 'Nervous Subsystem',
+      desc: 'Encapsulated myelinated nerve trunk delivering 120 m/s nerve impulses along dorsal spine.',
+      pipeline: 'NERVOUS',
+      role: 'DISTRIBUTION',
+      upstreamNodeName: 'Primary Ganglion Brain Core',
+      downstreamNodeNames: ['Ocular Beam Stalk Pods', 'Biomechanical Muscle Tendons'],
+    };
+    shipGroup.add(axonTubeMesh);
+
+    // Pipeline 4: Endosymbiotic Life Support System
+    const gizzardGeo = new THREE.ConeGeometry(headNode.radius * 0.5, 1.2, 8);
+    const gizzardMesh = new THREE.Mesh(gizzardGeo, mats.bone);
+    gizzardMesh.position.set(0, headNode.y - 1.5, headNode.z + 0.5);
+    gizzardMesh.rotation.x = Math.PI * 0.5;
+    gizzardMesh.userData = {
+      name: 'Comet Ice Ingestion Gizzard',
+      category: 'Life Support System',
+      desc: 'Ventral mouth cavity organ crushing ingested comet ice and minerals for metabolic bio-synthesis.',
+      pipeline: 'LIFE_SUPPORT',
+      role: 'GENERATION',
+      downstreamNodeNames: ['Photosynthetic Bio-Moss Bed'],
+      outputCapacity: '12.5 kg/min Mineral Ore',
+    };
+    shipGroup.add(gizzardMesh);
+
+    const bioMossGeo = new THREE.TorusGeometry(heartNode.radius * 1.1, 0.15, 8, 24);
+    const bioMossMesh = new THREE.Mesh(bioMossGeo, mats.flesh);
+    bioMossMesh.position.set(0, heartNode.y, heartNode.z);
+    bioMossMesh.rotation.x = Math.PI * 0.5;
+    bioMossMesh.userData = {
+      name: 'Photosynthetic Bio-Moss Bed',
+      category: 'Life Support System',
+      desc: 'Kleptoplastic algal carpet converting crew CO2 and liquid waste into pure 420 L/min oxygen.',
+      pipeline: 'LIFE_SUPPORT',
+      role: 'STORAGE',
+      upstreamNodeName: 'Comet Ice Ingestion Gizzard',
+      downstreamNodeNames: ['Human Habitat Room Chambers'],
+      outputCapacity: '420 L/min O2 Output',
+    };
+    shipGroup.add(bioMossMesh);
 
     // ACTIVE ORGAN REPULSION FORCE-FIELD SOLVER
     interface CandidateOrgan {
@@ -1502,6 +1654,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
               minFreeSpace: obj.userData.minFreeSpace,
               habitationVolume: obj.userData.habitationVolume,
               crewCapacity: obj.userData.crewCapacity,
+              pipeline: obj.userData.pipeline || (obj.userData.category === 'Nervous Subsystem' ? 'NERVOUS' : obj.userData.category === 'Circulatory Core' ? 'HEMOLYMPH' : obj.userData.category === 'Human Habitation Chamber' ? 'LIFE_SUPPORT' : 'BIO_PLASMA'),
+              role: obj.userData.role || (obj.userData.name.includes('Heart') ? 'GENERATION' : obj.userData.name.includes('Chamber') ? 'STORAGE' : obj.userData.name.includes('Nozzle') || obj.userData.name.includes('Pod') || obj.userData.name.includes('Spiracle') ? 'EFFECTOR' : 'DISTRIBUTION'),
+              upstreamNodeName: obj.userData.upstreamNodeName || (obj.userData.name.includes('Nozzle') ? 'Primary Plasma Highway Trunk' : obj.userData.name.includes('Spiracle') ? 'Aorta Central Heart Core' : obj.userData.name.includes('Chamber') ? 'Photosynthetic Bio-Moss Bed' : 'Bio-Plasma Electrolysis Gland'),
+              downstreamNodeNames: obj.userData.downstreamNodeNames || (obj.userData.name.includes('Heart') ? ['Hemolymph Atrium Reservoir', 'Central Aorta Highway'] : obj.userData.name.includes('Chamber') ? ['Cyber-Airlock Stomata Valves'] : ['Bio-Plasma Sphincter Vent Nozzles']),
+              operatingPressure: obj.userData.operatingPressure || (obj.userData.name.includes('Heart') ? '18.5 Bar' : obj.userData.name.includes('Chamber') ? '1.01 Bar' : '140 Bar'),
             });
           }
         }
@@ -1816,6 +1973,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         if (materialsRef.current.glowNode) {
           (materialsRef.current.glowNode as THREE.MeshStandardMaterial).emissiveIntensity =
             (state.anatomyLayer === 'organs' ? 3.2 : 1.8) + Math.sin(time * 3) * 0.6;
+        }
+
+        if (materialsRef.current.vascularVein) {
+          (materialsRef.current.vascularVein as THREE.MeshStandardMaterial).emissiveIntensity =
+            (state.anatomyLayer === 'vascular' ? 3.8 : 2.2) + Math.sin(time * (bpm / 10)) * 1.0;
         }
       }
 
