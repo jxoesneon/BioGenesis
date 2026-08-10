@@ -25,31 +25,31 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
 }) => {
   return (
     <aside className={`absolute top-24 lg:top-20 left-4 lg:left-6 bottom-28 lg:bottom-8 w-[calc(100%-2rem)] md:w-88 lg:w-88 z-20 bio-panel rounded-xl p-4 flex-col space-y-4 overflow-y-auto ${mobilePanel === 'genetics' ? 'flex' : 'hidden lg:flex'}`}>
-      <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
-        <h2 className="text-sm font-bold tracking-wider text-emerald-400 uppercase flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2">
+        <h2 className="text-sm font-bold tracking-wider text-cyan-400 uppercase flex items-center gap-2">
           <Sliders className="w-4 h-4" /> Genetics & Surface Splines
         </h2>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-emerald-500/80 hidden sm:inline">SEED: {state.seed}</span>
-          <button className="lg:hidden p-1 rounded-md text-emerald-400 hover:bg-emerald-950/50" onClick={() => setMobilePanel('none')}>
+          <span className="text-xs font-mono text-cyan-500/80 hidden sm:inline">SEED: {state.seed}</span>
+          <button className="lg:hidden p-1 rounded-md text-cyan-400 hover:bg-cyan-950/50" onClick={() => setMobilePanel('none')}>
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* NURBS Engine Parameters */}
-      <div className="space-y-3 bg-emerald-950/20 p-3 rounded-lg border border-emerald-500/20">
-        <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest flex items-center justify-between">
+      <div className="space-y-3 bg-cyan-950/20 p-3 rounded-lg border border-cyan-500/20">
+        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
             <Spline className="w-3.5 h-3.5 mr-1" /> Procedural NURBS Engine
           </span>
-          <span className="font-mono text-emerald-300">Degree {state.nurbsDegree} ({state.nurbsDegree === 1 ? 'Linear' : state.nurbsDegree === 2 ? 'Quadratic' : state.nurbsDegree === 3 ? 'Cubic' : 'Quartic'})</span>
+          <span className="font-mono text-cyan-300">Degree {state.nurbsDegree} ({state.nurbsDegree === 1 ? 'Linear' : state.nurbsDegree === 2 ? 'Quadratic' : state.nurbsDegree === 3 ? 'Cubic' : 'Quartic'})</span>
         </h3>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramNurbsDegree">Spline Degree (p)</label>
-            <span className="text-[10px] font-mono text-slate-500">Polynomial Order</span>
+            <span className="text-[10px] font-mono text-cyan-500">Polynomial Order</span>
           </div>
           <input
             type="range"
@@ -64,16 +64,16 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
-            <label htmlFor="paramSymmetryType" className="flex items-center gap-1 font-bold text-emerald-300">
-              <Compass className="w-3.5 h-3.5 text-emerald-400" /> Natural Symmetry Axis
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramSymmetryType" className="flex items-center gap-1 font-bold text-cyan-300">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" /> Natural Symmetry Axis
             </label>
           </div>
           <select
             id="paramSymmetryType"
             value={state.symmetryType}
             onChange={(e) => onUpdateState({ symmetryType: e.target.value as SymmetryType })}
-            className="w-full bg-slate-900 text-emerald-300 text-xs font-mono rounded p-1.5 border border-emerald-500/40 focus:outline-none cursor-pointer"
+            className="w-full bg-cyan-950/40 text-cyan-300 text-xs font-mono rounded p-1.5 border border-cyan-500/40 focus:outline-none cursor-pointer"
           >
             <option value="bilateral">1. Bilateral Mirror (Vertebrates / Arthropods)</option>
             <option value="radial-5">2. Pentamerous Radial 5-Fold (Echinoderm / Starfish)</option>
@@ -85,14 +85,14 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramLoftProfile">Loft Cross-Section Profile</label>
           </div>
           <select
             id="paramLoftProfile"
             value={state.loftProfile}
             onChange={(e) => onUpdateState({ loftProfile: e.target.value as LoftProfile })}
-            className="w-full bg-slate-900 text-emerald-300 text-xs font-mono rounded p-1.5 border border-emerald-500/30 focus:outline-none cursor-pointer"
+            className="w-full bg-cyan-950/40 text-cyan-300 text-xs font-mono rounded p-1.5 border border-cyan-500/30 focus:outline-none cursor-pointer"
           >
             <option value="trilobed">Trilobed Alien Carapace</option>
             <option value="spine">Dorsal Spined Ridge</option>
@@ -102,9 +102,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramRationalWeight">Rational Control Weight Bias (w)</label>
-            <span className="font-mono text-emerald-400">{state.rationalWeight}</span>
+            <span className="font-mono text-cyan-400">{state.rationalWeight}</span>
           </div>
           <input
             type="range"
@@ -119,9 +119,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramGridResolution">U x V Surface Resolution Grid</label>
-            <span className="font-mono text-emerald-400">{state.gridResolution}x{state.gridResolution}</span>
+            <span className="font-mono text-cyan-400">{state.gridResolution}x{state.gridResolution}</span>
           </div>
           <input
             type="range"
@@ -136,11 +136,11 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-xs pt-1">
-          <span className="text-slate-300 font-mono">Show 3D Control Net Grid:</span>
+          <span className="text-cyan-300 font-mono">Show 3D Control Net Grid:</span>
           <button
             onClick={() => onUpdateState({ showControlNet: !state.showControlNet })}
             className={`px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-all ${
-              state.showControlNet ? 'bio-panel bio-panel-active text-emerald-300' : 'bio-panel text-slate-400'
+              state.showControlNet ? 'bio-panel bio-panel-active text-cyan-300' : 'bio-panel text-cyan-400'
             }`}
           >
             {state.showControlNet ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
@@ -151,15 +151,15 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
 
       {/* Spine & Hull Morphing */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Bone className="w-3.5 h-3.5 text-emerald-500/70 mr-1" /> Carapace & Spine
+            <Bone className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> Carapace & Spine
           </span>
-          <span className="font-mono text-emerald-400">{state.length}m</span>
+          <span className="font-mono text-cyan-400">{state.length}m</span>
         </h3>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramLength">Backbone Length</label>
           </div>
           <input
@@ -175,9 +175,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramSegments">Vertebral Segments</label>
-            <span className="font-mono text-emerald-400">{state.segments}</span>
+            <span className="font-mono text-cyan-400">{state.segments}</span>
           </div>
           <input
             type="range"
@@ -192,9 +192,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramThoraxWidth">Thorax Girth</label>
-            <span className="font-mono text-emerald-400">{state.thoraxWidth}</span>
+            <span className="font-mono text-cyan-400">{state.thoraxWidth}</span>
           </div>
           <input
             type="range"
@@ -209,9 +209,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramPlateCoverage">Chitin Armor Shells</label>
-            <span className="font-mono text-emerald-400">{state.plateCoverage}%</span>
+            <span className="font-mono text-cyan-400">{state.plateCoverage}%</span>
           </div>
           <input
             type="range"
@@ -226,9 +226,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramSpinalArch">Spinal Flex Arch / Caudal Curve</label>
-            <span className="font-mono text-emerald-400">{state.spinalArch > 0 ? `+${state.spinalArch}` : state.spinalArch}m</span>
+            <span className="font-mono text-cyan-400">{state.spinalArch > 0 ? `+${state.spinalArch}` : state.spinalArch}m</span>
           </div>
           <input
             type="range"
@@ -243,9 +243,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramPlateOverlap">Overlapping Chitin Scales</label>
-            <span className="font-mono text-emerald-400">{state.plateOverlap}</span>
+            <span className="font-mono text-cyan-400">{state.plateOverlap}</span>
           </div>
           <input
             type="range"
@@ -260,20 +260,20 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
       </div>
 
-      <hr className="border-emerald-500/20" />
+      <hr className="border-cyan-500/20" />
 
       {/* Internal Systems & Respiration */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Activity className="w-3.5 h-3.5 text-emerald-500/70 mr-1" /> Vascular & Respiration
+            <Activity className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> Vascular & Respiration
           </span>
         </h3>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramVascularDensity">Vascular Artery Conduits</label>
-            <span className="font-mono text-emerald-400">{state.vascularDensity}</span>
+            <span className="font-mono text-cyan-400">{state.vascularDensity}</span>
           </div>
           <input
             type="range"
@@ -288,9 +288,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramSpiracleCount">Respiratory Spiracle Gill Vents</label>
-            <span className="font-mono text-emerald-400">{state.spiracleCount}</span>
+            <span className="font-mono text-cyan-400">{state.spiracleCount}</span>
           </div>
           <input
             type="range"
@@ -305,9 +305,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramTendonDensity">Muscular Ligament Fibers</label>
-            <span className="font-mono text-emerald-400">{state.tendonDensity}</span>
+            <span className="font-mono text-cyan-400">{state.tendonDensity}</span>
           </div>
           <input
             type="range"
@@ -323,20 +323,20 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
       </div>
 
 
-      <hr className="border-emerald-500/20" />
+      <hr className="border-cyan-500/20" />
 
       {/* Organic Extremities & Symbionts */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Dna className="w-3.5 h-3.5 text-emerald-500/70 mr-1" /> Appendages & Symbionts
+            <Dna className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> Appendages & Symbionts
           </span>
         </h3>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramTentacles">IK Feeler Appendages</label>
-            <span className="font-mono text-emerald-400">{state.tentaclePairs}</span>
+            <span className="font-mono text-cyan-400">{state.tentaclePairs}</span>
           </div>
           <input
             type="range"
@@ -351,9 +351,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramRibSpines">External Rib Spines</label>
-            <span className="font-mono text-emerald-400">{state.ribSpines}</span>
+            <span className="font-mono text-cyan-400">{state.ribSpines}</span>
           </div>
           <input
             type="range"
@@ -368,9 +368,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramEyePods">Ocular Beam Stalks</label>
-            <span className="font-mono text-emerald-400">{state.eyePods}</span>
+            <span className="font-mono text-cyan-400">{state.eyePods}</span>
           </div>
           <input
             type="range"
@@ -385,9 +385,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramSporeSacs">Spore Warhead Sacs</label>
-            <span className="font-mono text-emerald-400">{state.sporeSacs}</span>
+            <span className="font-mono text-cyan-400">{state.sporeSacs}</span>
           </div>
           <input
             type="range"
@@ -402,9 +402,9 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramBioThrusters">Plasma Vent Thruster Nozzles</label>
-            <span className="font-mono text-emerald-400">{state.bioThrusters}</span>
+            <span className="font-mono text-cyan-400">{state.bioThrusters}</span>
           </div>
           <input
             type="range"
@@ -419,7 +419,7 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-400">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramHabitatChambers" className="text-cyan-300 font-semibold">Human Habitat Living Sacs</label>
             <span className="font-mono text-cyan-400">{state.habitatChambers} Chambers</span>
           </div>
@@ -436,45 +436,45 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
         </div>
       </div>
 
-      <hr className="border-emerald-500/20" />
+      <hr className="border-cyan-500/20" />
 
       {/* DNA Vault & Genetic Splicing */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <FlaskConical className="w-3.5 h-3.5 text-emerald-500/70 mr-1" /> DNA Splicing Vault
+            <FlaskConical className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> DNA Splicing Vault
           </span>
         </h3>
 
         <div className="grid grid-cols-2 gap-2 text-xs font-mono">
           <button
             onClick={onSaveDNA_A}
-            className="bio-panel hover:border-emerald-400 p-2 rounded text-emerald-300 text-center flex items-center justify-center gap-1 cursor-pointer transition-all"
+            className="bio-panel hover:border-cyan-400 p-2 rounded text-cyan-300 text-center flex items-center justify-center gap-1 cursor-pointer transition-all"
           >
             <Bookmark className="w-3 h-3" /> Store Genome A
           </button>
           <button
             onClick={onSaveDNA_B}
-            className="bio-panel hover:border-emerald-400 p-2 rounded text-emerald-300 text-center flex items-center justify-center gap-1 cursor-pointer transition-all"
+            className="bio-panel hover:border-cyan-400 p-2 rounded text-cyan-300 text-center flex items-center justify-center gap-1 cursor-pointer transition-all"
           >
             <Bookmark className="w-3 h-3" /> Store Genome B
           </button>
         </div>
         <button
           onClick={onSpliceDNA}
-          className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 py-2 rounded text-xs font-bold font-mono text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)] flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95"
+          className="w-full bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 py-2 rounded text-xs font-bold font-mono text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.2)] flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95"
         >
-          <FlaskConical className="w-3.5 h-3.5 text-emerald-400 mr-1" /> SPLICE HYBRID OFFSPRING
+          <FlaskConical className="w-3.5 h-3.5 text-cyan-400 mr-1" /> SPLICE HYBRID OFFSPRING
         </button>
       </div>
 
-      <hr className="border-emerald-500/20" />
+      <hr className="border-cyan-500/20" />
 
       {/* Themes */}
       <div className="space-y-3 pb-2">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Palette className="w-3.5 h-3.5 text-emerald-500/70 mr-1" /> Pigment Mode
+            <Palette className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> Pigment Mode
           </span>
         </h3>
 
@@ -482,15 +482,15 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
           <button
             onClick={() => onSetTheme('acid')}
             className={`bio-panel p-2 rounded text-xs flex items-center gap-2 transition-all cursor-pointer ${
-              state.theme === 'acid' ? 'bio-panel-active text-emerald-300' : 'hover:border-emerald-400 text-slate-300'
+              state.theme === 'acid' ? 'bio-panel-active text-cyan-300' : 'hover:border-cyan-400 text-cyan-300'
             }`}
           >
-            <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span> Acid Emerald
+            <span className="w-3 h-3 rounded-full bg-[#10b981] shadow-[0_0_8px_#34d399]"></span> Acid Emerald
           </button>
           <button
             onClick={() => onSetTheme('void')}
             className={`bio-panel p-2 rounded text-xs flex items-center gap-2 transition-all cursor-pointer ${
-              state.theme === 'void' ? 'bio-panel-active text-violet-300' : 'hover:border-violet-400 text-slate-300'
+              state.theme === 'void' ? 'bio-panel-active text-violet-300' : 'hover:border-violet-400 text-cyan-300'
             }`}
           >
             <span className="w-3 h-3 rounded-full bg-violet-400 shadow-[0_0_8px_#c084fc]"></span> Void Biolum
@@ -498,7 +498,7 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
           <button
             onClick={() => onSetTheme('blood')}
             className={`bio-panel p-2 rounded text-xs flex items-center gap-2 transition-all cursor-pointer ${
-              state.theme === 'blood' ? 'bio-panel-active text-rose-300' : 'hover:border-rose-400 text-slate-300'
+              state.theme === 'blood' ? 'bio-panel-active text-rose-300' : 'hover:border-rose-400 text-cyan-300'
             }`}
           >
             <span className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span> Crimson Gore
@@ -506,7 +506,7 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
           <button
             onClick={() => onSetTheme('abyssal')}
             className={`bio-panel p-2 rounded text-xs flex items-center gap-2 transition-all cursor-pointer ${
-              state.theme === 'abyssal' ? 'bio-panel-active text-cyan-300' : 'hover:border-cyan-400 text-slate-300'
+              state.theme === 'abyssal' ? 'bio-panel-active text-cyan-300' : 'hover:border-cyan-400 text-cyan-300'
             }`}
           >
             <span className="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span> Deep Cyan

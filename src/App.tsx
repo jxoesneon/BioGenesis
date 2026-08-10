@@ -42,7 +42,7 @@ export default function App() {
     gridResolution: 28,
     showControlNet: true,
 
-    theme: 'acid',
+    theme: 'abyssal',
     pulseAnim: true,
     waveAnim: true,
     autoRotate: true,
@@ -194,7 +194,7 @@ export default function App() {
   }, [state.seed, showToast]);
 
   return (
-    <div className="relative h-screen w-screen flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
+    <div className="relative h-screen w-screen flex flex-col bg-[#04121e] text-cyan-100 select-none overflow-hidden font-sans">
       <Header
         state={state}
         onUpdateState={updateState}
@@ -251,11 +251,11 @@ export default function App() {
 
       {/* Notification Toast */}
       <div
-        className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-30 bio-panel px-4 py-2 rounded-lg border border-emerald-400/50 text-emerald-300 text-sm font-mono shadow-2xl transition-opacity duration-300 pointer-events-none flex items-center gap-2 ${
+        className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-30 bio-panel px-4 py-2 rounded-lg border border-cyan-400/50 text-cyan-300 text-sm font-mono shadow-2xl transition-opacity duration-300 pointer-events-none flex items-center gap-2 ${
           toastVisible ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <CheckCircle2 className="w-4 h-4 text-cyan-400" />
         <span>{toastMsg}</span>
       </div>
     </div>

@@ -26,7 +26,7 @@ export const ActionFooter: React.FC<ActionFooterProps> = ({
         <button
           onClick={() => setMobilePanel(mobilePanel === 'genetics' ? 'none' : 'genetics')}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${
-            mobilePanel === 'genetics' ? 'bg-emerald-600 text-slate-950' : 'bio-panel text-emerald-400'
+            mobilePanel === 'genetics' ? 'bg-cyan-600 text-cyan-950' : 'bio-panel text-cyan-400'
           }`}
         >
           {mobilePanel === 'genetics' ? <X className="w-4 h-4" /> : <Sliders className="w-4 h-4" />}
@@ -35,7 +35,7 @@ export const ActionFooter: React.FC<ActionFooterProps> = ({
         <button
           onClick={() => setMobilePanel(mobilePanel === 'telemetry' ? 'none' : 'telemetry')}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex justify-center items-center gap-2 transition-all ${
-            mobilePanel === 'telemetry' ? 'bg-rose-600 text-slate-950' : 'bio-panel text-rose-400'
+            mobilePanel === 'telemetry' ? 'bg-rose-600 text-cyan-950' : 'bio-panel text-rose-400'
           }`}
         >
           {mobilePanel === 'telemetry' ? <X className="w-4 h-4" /> : <HeartPulse className="w-4 h-4" />}
@@ -47,21 +47,21 @@ export const ActionFooter: React.FC<ActionFooterProps> = ({
       <div className="flex items-center justify-center gap-2 w-full flex-wrap lg:flex-nowrap">
         <button
           onClick={onResetView}
-          className="bio-panel hover:bio-panel-active text-slate-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+          className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
         >
           <Video className="w-4 h-4 hidden sm:block" /> Reset
         </button>
         <button
           onClick={onToggleAutoRotate}
           className={`px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap ${
-            state.autoRotate ? 'bio-panel bio-panel-active text-emerald-400' : 'bio-panel text-slate-400'
+            state.autoRotate ? 'bio-panel bio-panel-active text-cyan-400' : 'bio-panel text-cyan-400'
           }`}
         >
           <RotateCw className={`w-4 h-4 hidden sm:block ${state.autoRotate ? 'animate-spin' : ''}`} /> Auto-Rotate
         </button>
         <button
           onClick={onTakeSnapshot}
-          className="bio-panel hover:bio-panel-active text-slate-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+          className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
         >
           <Camera className="w-4 h-4 hidden sm:block" /> Snapshot
         </button>

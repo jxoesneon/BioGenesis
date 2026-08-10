@@ -1598,7 +1598,12 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     const height = canvasRef.current.clientHeight || window.innerHeight;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x020617, 0.022);
+    scene.fog = new THREE.FogExp2(0x04121e, 0.022);
+    const gridHelper = new THREE.GridHelper(100, 100, 0x06b6d4, 0x06b6d4);
+    (gridHelper.material as THREE.Material).opacity = 0.05;
+    (gridHelper.material as THREE.Material).transparent = true;
+    gridHelper.position.y = -6;
+    scene.add(gridHelper);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
