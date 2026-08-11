@@ -17,7 +17,8 @@ export const presets: PresetOption[] = [
     lore: 'Titan-class habitat carrier housing multi-tiered crew chambers lined with photosynthetic bio-moss. Fueled by heavy copper-hemocyanin peristaltic hearts.',
     config: {
       length: 22, segments: 16, thoraxWidth: 3.8, plateCoverage: 90,
-      tentaclePairs: 10, ribSpines: 28, eyePods: 6, sporeSacs: 10, bioThrusters: 5,
+      tentaclePairs: 10, ribSpines: 28, eyePods: 6, eyeStalkLength: 0.8, sporeSacs: 10, bioThrusters: 5,
+      pectoralFins: 2, caudalFlukes: 1, landingLimbs: 4, dorsalSail: 1,
       spinalArch: 1.5, plateOverlap: 12, vascularDensity: 8, spiracleCount: 12,
       tendonDensity: 16, fluidWobble: 1.8, loftProfile: 'trilobed'
     }
@@ -29,7 +30,8 @@ export const presets: PresetOption[] = [
     lore: 'Vanguard-class strike symbiont linked to a single pilot via graphene neural thread plugs. Ultra-fast reflex vectoring with exothermal gas jet siphons.',
     config: {
       length: 8, segments: 6, thoraxWidth: 1.4, plateCoverage: 60,
-      tentaclePairs: 2, ribSpines: 8, eyePods: 2, sporeSacs: 2, bioThrusters: 2,
+      tentaclePairs: 2, ribSpines: 8, eyePods: 2, eyeStalkLength: 0.2, sporeSacs: 2, bioThrusters: 2,
+      pectoralFins: 2, caudalFlukes: 1, landingLimbs: 2, dorsalSail: 0,
       spinalArch: 2.8, plateOverlap: 4, vascularDensity: 4, spiracleCount: 4,
       tendonDensity: 6, fluidWobble: 2.5, loftProfile: 'spine'
     }
@@ -41,7 +43,8 @@ export const presets: PresetOption[] = [
     lore: 'Mining dreadnought engineered with mineral-accumulated chitin armor plates. Grazes on asteroid belts to refine heavy metals for fleet shell synthesis.',
     config: {
       length: 18, segments: 14, thoraxWidth: 4.2, plateCoverage: 100,
-      tentaclePairs: 4, ribSpines: 32, eyePods: 8, sporeSacs: 12, bioThrusters: 6,
+      tentaclePairs: 4, ribSpines: 32, eyePods: 8, eyeStalkLength: 0.5, sporeSacs: 12, bioThrusters: 6,
+      pectoralFins: 0, caudalFlukes: 0, landingLimbs: 6, dorsalSail: 2,
       spinalArch: -1.0, plateOverlap: 16, vascularDensity: 10, spiracleCount: 14,
       tendonDensity: 20, fluidWobble: 1.2, loftProfile: 'star'
     }
@@ -53,7 +56,8 @@ export const presets: PresetOption[] = [
     lore: 'Deep-space stealth frigate equipped with active chromatophore skin and thermal spiracle dampening to blend into cosmic microwave background radiation.',
     config: {
       length: 11, segments: 8, thoraxWidth: 1.8, plateCoverage: 40,
-      tentaclePairs: 12, ribSpines: 12, eyePods: 4, sporeSacs: 8, bioThrusters: 1,
+      tentaclePairs: 12, ribSpines: 12, eyePods: 4, eyeStalkLength: 1.0, sporeSacs: 8, bioThrusters: 1,
+      pectoralFins: 4, caudalFlukes: 1, landingLimbs: 0, dorsalSail: 1,
       spinalArch: 3.5, plateOverlap: 2, vascularDensity: 6, spiracleCount: 6,
       tendonDensity: 10, fluidWobble: 2.8, loftProfile: 'trilobed'
     }
@@ -65,7 +69,8 @@ export const presets: PresetOption[] = [
     lore: 'Fleet brood mother dispensing repair bio-nanites and defensive spore screens. Houses high-capacity bio-moss oxygenating chambers.',
     config: {
       length: 15, segments: 12, thoraxWidth: 3.0, plateCoverage: 75,
-      tentaclePairs: 8, ribSpines: 20, eyePods: 4, sporeSacs: 12, bioThrusters: 4,
+      tentaclePairs: 8, ribSpines: 20, eyePods: 4, eyeStalkLength: 0.4, sporeSacs: 12, bioThrusters: 4,
+      pectoralFins: 2, caudalFlukes: 1, landingLimbs: 4, dorsalSail: 1,
       spinalArch: 0, plateOverlap: 8, vascularDensity: 6, spiracleCount: 10,
       tendonDensity: 12, fluidWobble: 1.5, loftProfile: 'circular'
     }

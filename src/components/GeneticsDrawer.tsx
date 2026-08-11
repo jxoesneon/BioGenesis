@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sliders, Eye, EyeOff, Bone, Dna, Palette, Bookmark, FlaskConical, Spline, Activity, Compass, X } from 'lucide-react';
-import { AppState, LoftProfile, SymmetryType, ThemeKey } from '../types';
+import { AppState, LoftProfile, SymmetryType, ThemeKey, OrganPipelineType } from '../types';
+import { PIPELINE_NAMES, PIPELINE_COLORS } from '../utils/pipelineGraph';
 
 interface GeneticsDrawerProps {
   state: AppState;
@@ -147,6 +148,57 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
             CONTROL NET
           </button>
         </div>
+
+        <div className="flex items-center justify-between text-xs pt-1">
+          <span className="text-cyan-300 font-mono">Show Organ Force Fields:</span>
+          <button
+            onClick={() => onUpdateState({ showForceField: !state.showForceField })}
+            className={`px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-all ${
+              state.showForceField ? 'bio-panel bio-panel-active text-cyan-300' : 'bio-panel text-cyan-400'
+            }`}
+          >
+            {state.showForceField ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
+            FORCE FIELD
+          </button>
+        </div>
+      </div>
+
+      {/* Pipeline Conduit Visibility */}
+      <div className="space-y-2 bg-cyan-950/20 p-3 rounded-lg border border-cyan-500/20">
+        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1">
+          <Activity className="w-3.5 h-3.5 mr-1" /> Pipeline Conduit Visibility
+        </h3>
+        {([
+          { key: 'BIO_PLASMA' as OrganPipelineType, field: 'showConduitBioPlasma' as const },
+          { key: 'HEMOLYMPH' as OrganPipelineType, field: 'showConduitHemolymph' as const },
+          { key: 'NERVOUS' as OrganPipelineType, field: 'showConduitNervous' as const },
+          { key: 'LIFE_SUPPORT' as OrganPipelineType, field: 'showConduitLifeSupport' as const },
+          { key: 'ARMOR_DEFENSE' as OrganPipelineType, field: 'showConduitArmorDefense' as const },
+        ]).map(({ key, field }) => {
+          const visible = state[field];
+          const color = PIPELINE_COLORS[key];
+          const cssColor = `#${color.toString(16).padStart(6, '0')}`;
+          return (
+            <div key={key} className="flex items-center justify-between text-xs">
+              <span className="text-cyan-300 font-mono flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: cssColor, boxShadow: `0 0 6px ${cssColor}` }}
+                />
+                {PIPELINE_NAMES[key]}
+              </span>
+              <button
+                onClick={() => onUpdateState({ [field]: !visible } as Partial<AppState>)}
+                className={`px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-all ${
+                  visible ? 'bio-panel bio-panel-active text-cyan-300' : 'bio-panel text-cyan-400'
+                }`}
+              >
+                {visible ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
+                {visible ? 'VISIBLE' : 'HIDDEN'}
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       {/* Spine & Hull Morphing */}
@@ -369,7 +421,7 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
 
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-cyan-400">
-            <label htmlFor="paramEyePods">Ocular Beam Stalks</label>
+            <label htmlFor="paramEyePods">Ocular Beam Pods</label>
             <span className="font-mono text-cyan-400">{state.eyePods}</span>
           </div>
           <input
@@ -380,6 +432,23 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
             step="2"
             value={state.eyePods}
             onChange={(e) => onUpdateState({ eyePods: parseInt(e.target.value) })}
+            className="w-full cursor-pointer"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramEyeStalkLength">Eye Stalk Length</label>
+            <span className="font-mono text-cyan-400">{state.eyeStalkLength.toFixed(1)}m</span>
+          </div>
+          <input
+            type="range"
+            id="paramEyeStalkLength"
+            min="0"
+            max="2"
+            step="0.1"
+            value={state.eyeStalkLength}
+            onChange={(e) => onUpdateState({ eyeStalkLength: parseFloat(e.target.value) })}
             className="w-full cursor-pointer"
           />
         </div>
@@ -432,6 +501,86 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
             value={state.habitatChambers}
             onChange={(e) => onUpdateState({ habitatChambers: parseInt(e.target.value) })}
             className="w-full cursor-pointer accent-cyan-400"
+          />
+        </div>
+      </div>
+
+      <hr className="border-cyan-500/20" />
+
+      {/* Supporting Appendages — Hydrodynamic/Aerodynamic */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">
+          <span className="flex items-center gap-1">
+            <Dna className="w-3.5 h-3.5 text-cyan-500/70 mr-1" /> Supporting Appendages
+          </span>
+          <span className="text-[9px] text-cyan-500/60 normal-case">Hydro/Aero Surfaces</span>
+        </h3>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramPectoralFins">Pectoral Hydrodynamic Fins</label>
+            <span className="font-mono text-cyan-400">{state.pectoralFins}</span>
+          </div>
+          <input
+            type="range"
+            id="paramPectoralFins"
+            min="0"
+            max="4"
+            step="1"
+            value={state.pectoralFins}
+            onChange={(e) => onUpdateState({ pectoralFins: parseInt(e.target.value) })}
+            className="w-full cursor-pointer"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramCaudalFlukes">Caudal Propulsion Flukes</label>
+            <span className="font-mono text-cyan-400">{state.caudalFlukes}</span>
+          </div>
+          <input
+            type="range"
+            id="paramCaudalFlukes"
+            min="0"
+            max="2"
+            step="1"
+            value={state.caudalFlukes}
+            onChange={(e) => onUpdateState({ caudalFlukes: parseInt(e.target.value) })}
+            className="w-full cursor-pointer"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramLandingLimbs">Articulated Landing Limbs</label>
+            <span className="font-mono text-cyan-400">{state.landingLimbs}</span>
+          </div>
+          <input
+            type="range"
+            id="paramLandingLimbs"
+            min="0"
+            max="6"
+            step="1"
+            value={state.landingLimbs}
+            onChange={(e) => onUpdateState({ landingLimbs: parseInt(e.target.value) })}
+            className="w-full cursor-pointer"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramDorsalSail">Dorsal Stabilizer Sails</label>
+            <span className="font-mono text-cyan-400">{state.dorsalSail}</span>
+          </div>
+          <input
+            type="range"
+            id="paramDorsalSail"
+            min="0"
+            max="3"
+            step="1"
+            value={state.dorsalSail}
+            onChange={(e) => onUpdateState({ dorsalSail: parseInt(e.target.value) })}
+            className="w-full cursor-pointer"
           />
         </div>
       </div>

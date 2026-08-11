@@ -16,10 +16,12 @@ import {
   Home,
   CheckCircle2,
   X,
+  Waves,
 } from 'lucide-react';
-import { AppState, TargetNodeInfo, ViewMode, AnatomyLayer } from '../types';
+import { AppState, TargetNodeInfo, ViewMode, AnatomyLayer, ShipSection, SHIP_SECTIONS } from '../types';
 import { LCG } from '../utils/nurbs';
 import { playScanChirp } from '../utils/audio';
+import { PIPELINE_NAMES } from '../utils/pipelineGraph';
 
 interface TelemetryPanelProps {
   state: AppState;
@@ -31,9 +33,11 @@ interface TelemetryPanelProps {
   onShowToast: (msg: string) => void;
   mobilePanel: 'genetics' | 'telemetry' | 'none';
   setMobilePanel: (panel: 'genetics' | 'telemetry' | 'none') => void;
+  highlightedSection: ShipSection | null;
+  onSetHighlightedSection: (section: ShipSection | null) => void;
 }
 
-type CategoryTab = 'ALL' | 'HABITATION' | 'CIRCULATORY' | 'PROPULSION' | 'SENSORY' | 'RESPIRATION' | 'WEAPONS';
+type CategoryTab = 'ALL' | 'SECTIONS' | 'HABITATION' | 'CIRCULATORY' | 'PROPULSION' | 'SENSORY' | 'RESPIRATION' | 'WEAPONS' | 'APPENDAGES';
 
 export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
   state,
@@ -45,6 +49,8 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
   onShowToast,
   mobilePanel,
   setMobilePanel,
+  highlightedSection,
+  onSetHighlightedSection,
 }) => {
   const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<CategoryTab>('ALL');
@@ -79,6 +85,7 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
     if (cat.includes('Propulsion')) return 'PROPULSION';
     if (cat.includes('Sensory') || cat.includes('Nervous')) return 'SENSORY';
     if (cat.includes('Respiratory')) return 'RESPIRATION';
+    if (cat.includes('Supporting Appendage')) return 'APPENDAGES';
     if (cat.includes('Weapon') || cat.includes('Appendage') || cat.includes('Exoskeleton') || cat.includes('Frame')) return 'WEAPONS';
     return 'ALL';
   };
@@ -91,6 +98,8 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
       case 'SENSORY': return <Eye className="w-3 h-3 text-cyan-400" />;
       case 'RESPIRATION': return <Wind className="w-3 h-3 text-blue-400" />;
       case 'WEAPONS': return <Shield className="w-3 h-3 text-violet-400" />;
+      case 'APPENDAGES': return <Waves className="w-3 h-3 text-teal-400" />;
+      case 'SECTIONS': return <Layers className="w-3 h-3 text-amber-400" />;
       default: return <Activity className="w-3 h-3 text-cyan-400" />;
     }
   };
@@ -229,10 +238,10 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
           <div className="mt-2 p-2 bg-cyan-950/60 rounded border border-cyan-500/40 space-y-1.5 text-[10px] font-mono shadow-[0_0_10px_rgba(6,182,212,0.15)]">
             <div className="flex justify-between items-center">
               <span className="text-cyan-300 uppercase font-bold text-[9px] flex items-center gap-1">
-                <Activity className="w-3.5 h-3.5 text-cyan-400" /> Pipeline Topology: {targetNode.pipeline.replace('_', ' ')}
+                <Activity className="w-3.5 h-3.5 text-cyan-400" /> Pipeline: {PIPELINE_NAMES[targetNode.pipeline]}
               </span>
               <span className="px-1.5 py-0.5 rounded bg-cyan-900/80 text-cyan-200 text-[8px] font-bold uppercase border border-cyan-400/40">
-                {targetNode.role}
+                Role: {targetNode.role}
               </span>
             </div>
             {targetNode.upstreamNodeName && (
@@ -251,6 +260,12 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
               <div className="flex justify-between text-cyan-300">
                 <span className="text-cyan-500">Operating Pressure:</span>
                 <span className="text-cyan-300 font-semibold">{targetNode.operatingPressure}</span>
+              </div>
+            )}
+            {targetNode.outputCapacity && (
+              <div className="flex justify-between text-cyan-300">
+                <span className="text-cyan-500">Output Capacity:</span>
+                <span className="text-cyan-300 font-semibold">{targetNode.outputCapacity}</span>
               </div>
             )}
           </div>
@@ -391,10 +406,12 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
 
             {/* Tabbed Group Filters */}
             <div className="flex flex-wrap gap-1 border-b border-cyan-500/20 pb-2">
-              {(['ALL', 'HABITATION', 'CIRCULATORY', 'PROPULSION', 'SENSORY', 'RESPIRATION', 'WEAPONS'] as CategoryTab[]).map((tab) => {
+              {(['ALL', 'SECTIONS', 'HABITATION', 'CIRCULATORY', 'PROPULSION', 'SENSORY', 'RESPIRATION', 'WEAPONS', 'APPENDAGES'] as CategoryTab[]).map((tab) => {
                 const count = tab === 'ALL'
                   ? organList.length
-                  : organList.filter((o) => getCategoryGroup(o.category) === tab).length;
+                  : tab === 'SECTIONS'
+                    ? SHIP_SECTIONS.length
+                    : organList.filter((o) => getCategoryGroup(o.category) === tab).length;
 
                 return (
                   <button
@@ -416,9 +433,104 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
               })}
             </div>
 
-            {/* Scrollable Organ List */}
+            {/* Scrollable Organ List / Section List */}
             <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
-              {filteredOrgans.length === 0 ? (
+              {selectedTab === 'SECTIONS' ? (
+                <>
+                  {/* Section list — each section shows its organs */}
+                  {SHIP_SECTIONS.map((sec) => {
+                    const isActive = highlightedSection === sec.id;
+                    const colorHex = '#' + sec.color.toString(16).padStart(6, '0');
+                    const sectionOrgans = organList.filter((o) => o.section === sec.id);
+
+                    return (
+                      <div key={sec.id} className="space-y-1">
+                        {/* Section header */}
+                        <div
+                          onClick={() => {
+                            onSetHighlightedSection(isActive ? null : sec.id);
+                            playScanChirp(state.audioEnabled);
+                            onShowToast(isActive ? `Section highlight cleared` : `Highlighted: ${sec.label}`);
+                          }}
+                          className={`p-2 rounded border transition-all cursor-pointer text-xs font-mono ${
+                            isActive
+                              ? 'bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                              : 'bg-[#04121e]/80 border-cyan-500/20 hover:border-cyan-400/50 hover:bg-cyan-950/60 text-cyan-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className="inline-block w-2.5 h-2.5 rounded-full shrink-0 border border-white/20"
+                                style={{ backgroundColor: colorHex, boxShadow: `0 0 6px ${colorHex}` }}
+                              />
+                              <span className="font-bold text-cyan-300">{sec.label}</span>
+                              {isActive && (
+                                <span className="text-[8px] font-bold px-1.5 py-0.2 rounded bg-cyan-400 text-cyan-950 flex items-center gap-0.5 animate-pulse">
+                                  <CheckCircle2 className="w-2.5 h-2.5" /> HIGHLIGHTED
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded ${isActive ? 'bg-cyan-400 text-cyan-950' : 'bg-slate-800 text-cyan-400'}`}>
+                              {sectionOrgans.length} organs
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-cyan-400 leading-snug mt-1">{sec.description}</div>
+                          <div className="text-[9px] text-cyan-500/70">
+                            U: {sec.uMin.toFixed(2)}–{sec.uMax.toFixed(2)}
+                          </div>
+                        </div>
+
+                        {/* Organ list inside this section — shown when section is highlighted */}
+                        {isActive && (
+                          <div className="space-y-1 pl-3 border-l-2 border-cyan-400/30 ml-2">
+                            {sectionOrgans.length === 0 ? (
+                              <div className="text-[10px] text-cyan-500 italic py-1 font-mono">
+                                No organs in this section.
+                              </div>
+                            ) : (
+                              sectionOrgans.map((organ) => {
+                                const isSelected = targetNode?.name === organ.name;
+                                const catGroup = getCategoryGroup(organ.category);
+                                return (
+                                  <div
+                                    key={organ.name}
+                                    onClick={() => handleSelectOrgan(organ)}
+                                    className={`p-1.5 rounded border transition-all cursor-pointer text-[11px] font-mono flex items-start justify-between gap-2 ${
+                                      isSelected
+                                        ? 'bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
+                                        : 'bg-[#04121e]/60 border-cyan-500/15 hover:border-cyan-400/40 hover:bg-cyan-950/50 text-cyan-300'
+                                    }`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        {getCategoryIcon(catGroup)}
+                                        <span className="font-bold text-cyan-300 truncate">{organ.name}</span>
+                                      </div>
+                                      <div className="text-[9px] text-cyan-500/80 mt-0.5">{organ.category}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {highlightedSection && (
+                    <button
+                      onClick={() => {
+                        onSetHighlightedSection(null);
+                        onShowToast('Section highlight cleared');
+                      }}
+                      className="w-full text-[10px] font-mono text-cyan-400 hover:text-cyan-300 bg-[#04121e]/80 hover:bg-cyan-950/60 border border-cyan-500/20 rounded py-1.5 transition-all cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Clear Highlight
+                    </button>
+                  )}
+                </>
+              ) : filteredOrgans.length === 0 ? (
                 <div className="text-[11px] text-cyan-500 text-center py-4 font-mono">
                   No matching organs or components found.
                 </div>

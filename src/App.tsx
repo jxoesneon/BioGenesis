@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { AppState, TargetNodeInfo, ViewMode, ThemeKey, AnatomyLayer } from './types';
+import { AppState, TargetNodeInfo, ViewMode, ThemeKey, AnatomyLayer, ShipSection } from './types';
 import { presets } from './utils/theme';
 import { playMutationSquelch } from './utils/audio';
 import { exportToOBJ } from './utils/exporter';
@@ -22,10 +22,16 @@ export default function App() {
     tentaclePairs: 6,
     ribSpines: 16,
     eyePods: 4,
+    eyeStalkLength: 0.6,
     sporeSacs: 6,
     bioThrusters: 3,
     habitatChambers: 3,
     neuralNodes: 12,
+
+    pectoralFins: 2,
+    caudalFlukes: 1,
+    landingLimbs: 4,
+    dorsalSail: 1,
 
     symmetryType: 'bilateral',
 
@@ -41,14 +47,22 @@ export default function App() {
     rationalWeight: 1.8,
     gridResolution: 28,
     showControlNet: true,
+    showForceField: false,
+    showConduitBioPlasma: true,
+    showConduitHemolymph: true,
+    showConduitNervous: true,
+    showConduitLifeSupport: true,
+    showConduitArmorDefense: true,
+    fireDisruptors: 0,
 
     theme: 'abyssal',
     pulseAnim: true,
     waveAnim: true,
-    autoRotate: true,
+    autoRotate: false,
     viewMode: 'organic',
     anatomyLayer: 'full',
     audioEnabled: true,
+    heartbeatEnabled: false,
 
     genomeA: null,
     genomeB: null,
@@ -64,6 +78,7 @@ export default function App() {
   });
 
   const [organList, setOrganList] = useState<TargetNodeInfo[]>([]);
+  const [highlightedSection, setHighlightedSection] = useState<ShipSection | null>(null);
 
   const [toastMsg, setToastMsg] = useState<string>('');
   const [toastVisible, setToastVisible] = useState<boolean>(false);
@@ -215,6 +230,7 @@ export default function App() {
         rendererRef={rendererRef}
         controlsRef={controlsRef}
         shipGroupRef={shipGroupRef}
+        highlightedSection={highlightedSection}
       />
 
       <GeneticsDrawer
@@ -238,6 +254,8 @@ export default function App() {
         onShowToast={showToast}
         mobilePanel={mobilePanel}
         setMobilePanel={setMobilePanel}
+        highlightedSection={highlightedSection}
+        onSetHighlightedSection={setHighlightedSection}
       />
 
       <ActionFooter

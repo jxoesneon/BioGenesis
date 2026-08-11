@@ -9,3 +9,19 @@ coverage/
 
 # Ciel local domain
 .ciel/
+
+# FastEmbed cache
+.fastembed_cache/
+
+# Agent files
+agents.md
+AGENTS.md
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# IDE
+.vscode/
+
+# Screenshots
+biogenesis-*.png

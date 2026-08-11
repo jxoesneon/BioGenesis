@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, Dices, Download, Spline } from 'lucide-react';
+import { Volume2, VolumeX, Dices, Download, Spline, HeartPulse, Crosshair } from 'lucide-react';
 import { AppState } from '../types';
 import { presets } from '../utils/theme';
 
@@ -48,6 +48,28 @@ export const Header: React.FC<HeaderProps> = ({
               <VolumeX className="w-4 h-4 text-cyan-400" /> <span className="text-[10px] sm:text-xs font-mono text-cyan-400 hidden sm:inline">MUTED</span>
             </>
           )}
+        </button>
+
+        <button
+          onClick={() => onUpdateState({ heartbeatEnabled: !state.heartbeatEnabled })}
+          className={`p-2 sm:px-3 sm:py-2 rounded-lg text-sm flex items-center gap-2 transition-all cursor-pointer ${
+            state.heartbeatEnabled ? 'bio-panel bio-panel-active text-rose-400' : 'bio-panel text-cyan-400'
+          }`}
+          title="Toggle Heartbeat Sound"
+        >
+          <HeartPulse className={`w-4 h-4 ${state.heartbeatEnabled ? 'animate-pulse' : ''}`} />
+          <span className="text-[10px] sm:text-xs font-mono hidden sm:inline">
+            {state.heartbeatEnabled ? 'HEART ON' : 'HEART OFF'}
+          </span>
+        </button>
+
+        <button
+          onClick={() => onUpdateState({ fireDisruptors: state.fireDisruptors + 1 })}
+          className="bg-rose-600/80 hover:bg-rose-500 text-rose-50 p-2 sm:px-3 sm:py-2 rounded-lg text-sm flex items-center gap-2 transition-all cursor-pointer hover:animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95"
+          title="Fire Bio-Plasma Disruptor Glands"
+        >
+          <Crosshair className="w-4 h-4" />
+          <span className="text-[10px] sm:text-xs font-mono hidden sm:inline">FIRE DISRUPTORS</span>
         </button>
 
         <div className="bio-panel px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg flex items-center gap-2">

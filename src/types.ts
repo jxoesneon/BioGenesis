@@ -4,6 +4,37 @@ export type ViewMode = 'organic' | 'wireframe' | 'xray';
 export type AnatomyLayer = 'full' | 'exoskeleton' | 'vascular' | 'organs' | 'muscular';
 export type ThemeKey = 'acid' | 'void' | 'blood' | 'abyssal';
 
+// ── Anatomical ship sections (longitudinal hull regions) ──
+// Sections are defined by u-parameter ranges along the spine (0 = nose, 1 = tail tip).
+// peakU (max girth) is typically ~0.30, so Thoracic spans the widest region.
+export type ShipSection = 'cranial' | 'neck' | 'thoracic' | 'caudal' | 'tail';
+
+export interface ShipSectionDef {
+  id: ShipSection;
+  label: string;
+  uMin: number;
+  uMax: number;
+  color: number;      // 0xRRGGBB highlight color
+  description: string;
+}
+
+export const SHIP_SECTIONS: ShipSectionDef[] = [
+  { id: 'cranial',  label: 'Cranial',  uMin: 0.00, uMax: 0.15, color: 0x60a5fa, description: 'Domed head region — cranium, ocular pods, neural ganglion clusters.' },
+  { id: 'neck',     label: 'Neck',     uMin: 0.15, uMax: 0.30, color: 0xfbbf24, description: 'Waist behind the head — transition from cranium to thoracic mass.' },
+  { id: 'thoracic', label: 'Thoracic', uMin: 0.30, uMax: 0.65, color: 0x34d399, description: 'Maximum girth region — habitats, ribs, spiracles, heart, plasma glands.' },
+  { id: 'caudal',   label: 'Caudal',   uMin: 0.65, uMax: 0.85, color: 0xf472b6, description: 'Tail body — spore sacs, tentacles, propulsion cowl.' },
+  { id: 'tail',     label: 'Tail Tip', uMin: 0.85, uMax: 1.00, color: 0xa78bfa, description: 'Fine tail taper — thruster nozzles, caudal trunk terminus.' },
+];
+
+// Map a u-parameter (0 = nose, 1 = tail tip) to its ship section.
+export function uToSection(u: number): ShipSection {
+  for (const sec of SHIP_SECTIONS) {
+    if (u >= sec.uMin && u < sec.uMax) return sec.id;
+  }
+  // u === 1.0 falls into the tail tip
+  return 'tail';
+}
+
 export interface AppState {
   seed: number;
   length: number;
@@ -13,10 +44,18 @@ export interface AppState {
   tentaclePairs: number;
   ribSpines: number;
   eyePods: number;
+  eyeStalkLength: number;   // Ocular stalk length in meters (0 = stalkless eyes flush on hull)
   sporeSacs: number;
   bioThrusters: number;
   habitatChambers: number;   // Square-ish human living rooms/habitat sacs (0 to 8)
   neuralNodes: number;
+
+  // Supporting Appendages — hydrodynamic/aerodynamic organic shapes for
+  // planetary landing, ocean navigation, and dense dust cloud traversal.
+  pectoralFins: number;      // Manta-ray wings on thoracic flanks (0 to 4)
+  caudalFlukes: number;      // Whale-tail horizontal flukes at tail tip (0 to 2)
+  landingLimbs: number;      // Cephalopod-articulated ventral landing legs (0 to 6)
+  dorsalSail: number;        // Sailfish-style dorsal stabilizer fin (0 to 3)
   
   // Biological Symmetry & Morphology
   symmetryType: SymmetryType;
@@ -35,6 +74,17 @@ export interface AppState {
   rationalWeight: number;
   gridResolution: number;
   showControlNet: boolean;
+  showForceField: boolean;
+
+  // Per-pipeline conduit visibility toggles (ORGAN_SYSTEMS.md §2)
+  showConduitBioPlasma: boolean;
+  showConduitHemolymph: boolean;
+  showConduitNervous: boolean;
+  showConduitLifeSupport: boolean;
+  showConduitArmorDefense: boolean;
+
+  // Disruptor firing trigger
+  fireDisruptors: number; // increment to trigger a firing event
 
   theme: ThemeKey;
   pulseAnim: boolean;
@@ -43,6 +93,7 @@ export interface AppState {
   viewMode: ViewMode;
   anatomyLayer: AnatomyLayer;
   audioEnabled: boolean;
+  heartbeatEnabled: boolean;
   
   genomeA: AppState | null;
   genomeB: AppState | null;
@@ -59,6 +110,34 @@ export interface ThemeColors {
 
 export type OrganPipelineType = 'BIO_PLASMA' | 'HEMOLYMPH' | 'NERVOUS' | 'LIFE_SUPPORT' | 'ARMOR_DEFENSE';
 export type OrganPipelineRole = 'GENERATION' | 'STORAGE' | 'DISTRIBUTION' | 'EFFECTOR' | 'INTERFACE' | 'STRUCTURAL' | 'DEFENSE' | 'REPAIR';
+
+// ── Organ Pipeline Graph Data Model (ORGAN_SYSTEMS.md §4) ──
+
+export interface OrganPipelineNode {
+  id: string;
+  name: string;
+  pipeline: OrganPipelineType;
+  role: OrganPipelineRole;
+  anatomicalLayer: AnatomyLayer;
+  position: [number, number, number];
+  upstreamNodeId?: string;
+  downstreamNodeIds: string[];
+  telemetry: {
+    outputRate?: string;
+    operatingPressure?: string;
+    efficiencyCoherence?: string;
+  };
+}
+
+export interface OrganConnectionLink {
+  id: string;
+  pipeline: OrganPipelineType;
+  sourceNodeId: string;
+  targetNodeId: string;
+  conduitRadius: number;
+  fluidOrSignalType: string;
+  pathControlPoints: [number, number, number][];
+}
 
 export interface TargetNodeInfo {
   name: string;
@@ -77,6 +156,9 @@ export interface TargetNodeInfo {
   minFreeSpace?: string;
   habitationVolume?: string;
   crewCapacity?: string;
+
+  // Anatomical section this organ belongs to (derived from its u-position)
+  section?: ShipSection;
 
   // Cyber-Organic Bio-Telemetry Extensions
   speciesClass?: string;
