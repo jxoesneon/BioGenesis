@@ -29,11 +29,13 @@ export default function App() {
     neuralNodes: 12,
 
     pectoralFins: 2,
+    appendageScale: 1.0,
     caudalFlukes: 1,
     landingLimbs: 4,
     dorsalSail: 1,
 
     symmetryType: 'bilateral',
+    intakeType: 'lamprey-siphon',
 
     spinalArch: 1.0,
     plateOverlap: 8,

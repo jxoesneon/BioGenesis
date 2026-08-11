@@ -45,6 +45,7 @@ import {
   opRotate,
   opUnion,
   sampleSDFGrid,
+  releaseSDFGridBuffer,
 } from './sdf';
 import { marchingCubes } from './marchingCubes';
 
@@ -313,6 +314,30 @@ const RULES: BlendRule[] = [
     if (isOrganType(b, 'spore') && a.kind === 'hull') {
       return blend(0.14, 'flesh', 'hull surface grows around spore sac');
     }
+
+    // Pectoral Fin → hull: YES
+    if (isOrganType(a, 'pectoralFin') && b.kind === 'hull') {
+      return blend(0.25, 'carapace', 'pectoral fin blends seamlessly into hull');
+    }
+    if (isOrganType(b, 'pectoralFin') && a.kind === 'hull') {
+      return blend(0.25, 'carapace', 'hull surface grows around pectoral fin');
+    }
+
+    // Caudal Fluke → hull: YES
+    if (isOrganType(a, 'caudalFluke') && b.kind === 'hull') {
+      return blend(0.25, 'carapace', 'caudal fluke blends seamlessly into hull');
+    }
+    if (isOrganType(b, 'caudalFluke') && a.kind === 'hull') {
+      return blend(0.25, 'carapace', 'hull surface grows around caudal fluke');
+    }
+
+    // Dorsal Sail → hull: YES
+    if (isOrganType(a, 'dorsalSail') && b.kind === 'hull') {
+      return blend(0.25, 'carapace', 'dorsal sail blends seamlessly into hull');
+    }
+    if (isOrganType(b, 'dorsalSail') && a.kind === 'hull') {
+      return blend(0.25, 'carapace', 'hull surface grows around dorsal sail');
+    }
     return null;
   },
 
@@ -562,9 +587,13 @@ export function generateBlendBridge(
       break;
     }
   }
-  if (hasNaN) return null;
+  if (hasNaN) {
+    releaseSDFGridBuffer(values);
+    return null;
+  }
 
   const geometry = marchingCubes(values, resolution, bounds, { computeNormals: true });
+  releaseSDFGridBuffer(values);
 
   if (!geometry.getAttribute('position') || geometry.getAttribute('position').count === 0) {
     return null;
@@ -616,8 +645,37 @@ export function buildCandidateOrganSDF(
     return opTranslate(sdSphere(size), sacCenter);
   }
 
-  // Organ types without an SDF approximation return null — they keep the
-  // legacy socket collar approach (tentacles, spiracles, ribs, habitat).
+  if (organType === 'pectoralFin' || organType === 'caudalFluke' || organType === 'dorsalSail') {
+    // Generate an ellipsoid/sphere at the root to blend the flat geometry into the hull
+    const rootCenter = basePos.clone().addScaledVector(normal, size * 0.1);
+    return opTranslate(sdSphere(size * 1.5), rootCenter);
+  }
+
+  if (organType === 'tentacle') {
+    // Generate a capsule at the root to blend the spline into the hull
+    const rootCenter = basePos.clone().addScaledVector(normal, size * 0.1);
+    return opTranslate(sdSphere(size * 0.8), rootCenter);
+  }
+  
+  if (organType === 'spiracle') {
+    // Generate a torus SDF to blend the vent into the hull
+    const torusCenter = basePos.clone().addScaledVector(normal, 0.0);
+    return opTranslate(sdTorus(0.32, 0.15), torusCenter);
+  }
+  
+  if (organType === 'rib') {
+    // Generate a small capsule at the root to blend the rib into the hull
+    const rootCenter = basePos.clone().addScaledVector(normal, size * 0.1);
+    return opTranslate(sdSphere(size * 1.0), rootCenter);
+  }
+  
+  if (organType === 'habitat') {
+    // Generate a box SDF to blend the habitat block into the hull
+    // A habitat is approx 1.8 x 1.4 x 1.8 (radius 0.9 x 0.7 x 0.9)
+    const boxCenter = basePos.clone().addScaledVector(normal, 0.5);
+    return opTranslate(sdBox(new THREE.Vector3(0.9, 0.7, 0.9)), boxCenter);
+  }
+
   return null;
 }
 

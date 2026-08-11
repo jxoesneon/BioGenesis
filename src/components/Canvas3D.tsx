@@ -8,6 +8,7 @@ import { LCG } from '../utils/nurbs';
 import { themes, generateBioSkinTexture } from '../utils/theme';
 import { playHeartbeatSound, playScanChirp } from '../utils/audio';
 import { buildPipelineNodes, buildPipelineConnections, ShipGeometryContext, NODE_IDS, PIPELINE_COLORS } from '../utils/pipelineGraph';
+import { calculateEnergyGeneration, calculateEnergyConsumption, evaluateEnergyStatus } from '../utils/energy';
 import {
   initPipeline,
   generateOrgan,
@@ -137,6 +138,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
   // firing completion).
   const timerRef = useRef<THREE.Timer | null>(null);
   const lastFireDisruptorsRef = useRef<number>(0);
+  const energyStatusRef = useRef<{ status: string; ratio: number }>({ status: 'OPTIMAL', ratio: 1 });
 
   // ── Organ dragging + live hull adaptation refs ──
   // Store the build-time state needed to re-adapt the hull when an organ is dragged.
@@ -878,6 +880,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     const pipelineConnections = buildPipelineConnections(pipelineNodes, ctx);
     const nodeMap = new Map(pipelineNodes.map(n => [n.id, n]));
 
+    const energyGen = calculateEnergyGeneration(state);
+    const energyLoad = pipelineNodes.reduce((sum, n) => sum + (n.telemetry?.baseEnergyCost || 0), 0);
+    const globalEnergyStatus = evaluateEnergyStatus(energyGen, energyLoad);
+    energyStatusRef.current = { status: globalEnergyStatus, ratio: energyGen / (energyLoad || 1) };
+
     // Pipeline 1: Bio-Plasma Energy & Propulsion System
     const plasmaGlandGeo = new THREE.DodecahedronGeometry(heartNode.radius * 0.55, 1);
     const plasmaGlandMesh = new THREE.Mesh(plasmaGlandGeo, mats.glowNode);
@@ -1023,21 +1030,75 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     };
     shipGroup.add(axonTubeMesh);
 
-    // Pipeline 4: Endosymbiotic Life Support System
-    const gizzardGeo = new THREE.ConeGeometry(headNode.radius * 0.5, 1.2, 8);
-    const gizzardMesh = new THREE.Mesh(gizzardGeo, mats.bone);
-    gizzardMesh.position.set(...(nodeMap.get(NODE_IDS.ICE_GIZZARD)!.position));
-    gizzardMesh.rotation.x = Math.PI * 0.5;
-    gizzardMesh.userData = {
-      name: 'Comet Ice Ingestion Gizzard',
-      category: 'Life Support System',
-      desc: 'Ventral mouth cavity organ crushing ingested comet ice and minerals for metabolic bio-synthesis.',
+    // Pipeline 4: Endosymbiotic Life Support System (Energy Intake)
+    const intakeGroup = new THREE.Group();
+    const gizzardPos = nodeMap.get(NODE_IDS.ICE_GIZZARD)!.position;
+    intakeGroup.position.set(...gizzardPos);
+
+    switch (state.intakeType) {
+      case 'baleen-ram': {
+        const geo = new THREE.BoxGeometry(headNode.radius * 2.2, headNode.radius * 0.8, 1.5);
+        const mesh = new THREE.Mesh(geo, mats.bone);
+        intakeGroup.add(mesh);
+        break;
+      }
+      case 'crushing-mandibles': {
+        const geo = new THREE.ConeGeometry(headNode.radius * 0.4, 1.8, 8);
+        geo.translate(0, 0.9, 0); // pivot at base
+        const left = new THREE.Mesh(geo, mats.bone);
+        left.position.set(headNode.radius * 0.7, 0, 0);
+        left.rotation.z = -Math.PI * 0.15;
+        left.rotation.x = Math.PI * 0.6;
+        const right = new THREE.Mesh(geo, mats.bone);
+        right.position.set(-headNode.radius * 0.7, 0, 0);
+        right.rotation.z = Math.PI * 0.15;
+        right.rotation.x = Math.PI * 0.6;
+        intakeGroup.add(left, right);
+        break;
+      }
+      case 'lamprey-siphon': {
+        const geo = new THREE.TorusGeometry(headNode.radius * 0.6, 0.25, 8, 16);
+        const mesh = new THREE.Mesh(geo, mats.flesh);
+        mesh.rotation.x = Math.PI * 0.5;
+        intakeGroup.add(mesh);
+        break;
+      }
+      case 'stealth-slit': {
+        const geo = new THREE.CylinderGeometry(headNode.radius * 1.1, headNode.radius * 1.1, 0.3, 16);
+        const mesh = new THREE.Mesh(geo, mats.carapace);
+        mesh.scale.set(1, 0.1, 1);
+        intakeGroup.add(mesh);
+        break;
+      }
+      case 'spore-filter': {
+        const geo = new THREE.IcosahedronGeometry(headNode.radius * 0.8, 1);
+        const mesh = new THREE.Mesh(geo, mats.flesh);
+        mesh.scale.set(1, 0.5, 1.5);
+        intakeGroup.add(mesh);
+        break;
+      }
+      default: {
+        const geo = new THREE.ConeGeometry(headNode.radius * 0.5, 1.2, 8);
+        const mesh = new THREE.Mesh(geo, mats.bone);
+        mesh.rotation.x = Math.PI * 0.5;
+        intakeGroup.add(mesh);
+      }
+    }
+
+    // Add raycast target area for the intake
+    const intakeHitGeo = new THREE.SphereGeometry(headNode.radius * 1.2, 8, 8);
+    const intakeHitMesh = new THREE.Mesh(intakeHitGeo, new THREE.MeshBasicMaterial({ visible: false }));
+    intakeHitMesh.userData = {
+      name: 'Energy Intake Maw',
+      category: 'Metabolic Subsystem',
+      desc: 'Primary energy harvester. Design depends on species diet (ore, ambient radiation, organic debris).',
       pipeline: 'LIFE_SUPPORT',
       role: 'GENERATION',
       downstreamNodeNames: ['Photosynthetic Bio-Moss Bed'],
       outputCapacity: nodeMap.get(NODE_IDS.ICE_GIZZARD)!.telemetry.outputRate,
     };
-    shipGroup.add(gizzardMesh);
+    intakeGroup.add(intakeHitMesh);
+    shipGroup.add(intakeGroup);
 
     const bioMossGeo = new THREE.TorusGeometry(heartNode.radius * 0.55, 0.15, 8, 24);
     const bioMossMesh = new THREE.Mesh(bioMossGeo, mats.flesh);
@@ -1369,7 +1430,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           // 0.85 (was 0.70): the leviathan hull is slimmer than the old grub
           // profile, so spiracles need a wider force-field to stay clear of
           // large neighbors (habitat chambers) on the reduced circumference.
-          clearanceRadius: 0.85,
+          clearanceRadius: 2.80,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Hyper-Oxygenated Haemolymph',
@@ -1403,7 +1464,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           type: 'rib',
           u: initialU,
           v: initialV,
-          clearanceRadius: 1.60,
+          clearanceRadius: 4.50,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Calcified Bone Marrow Fluid',
@@ -1435,7 +1496,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           type: 'eye',
           u: initialU,
           v: initialV,
-          clearanceRadius: 0.75,
+          clearanceRadius: 1.50,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Cryo-Aqueous Ocular Fluid',
@@ -1466,7 +1527,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'spore',
         u: initialU,
         v: initialV,
-        clearanceRadius: 0.95,
+        clearanceRadius: 2.80,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
         requiredFluid: 'Corrosive Bio-Acid Solution',
@@ -1498,7 +1559,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           type: 'tentacle',
           u: initialU,
           v: initialV,
-          clearanceRadius: 3.00,
+          clearanceRadius: 4.50,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Myofibrillar Hydraulic Liquid',
@@ -1528,7 +1589,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'neural',
         u: initialU,
         v: initialV,
-        clearanceRadius: 0.90,
+        clearanceRadius: 2.80,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
         requiredFluid: 'Neuro-Transmitter Bio-Plasma',
@@ -1573,7 +1634,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // 2.25 (was 1.85): habitat rooms are 1.5m boxes whose corners extend
         // ~1.1m from center; on the slimmer leviathan hull they need a larger
         // repulsion field to avoid clipping spiracles/eyes/spore pods.
-        clearanceRadius: 2.25,
+        clearanceRadius: 3.50,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
         requiredFluid: 'Oxygenated Hydro-Gel & Life Support Haemolymph',
@@ -1608,7 +1669,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           type: 'pectoralFin',
           u: initialU,
           v: initialV,
-          clearanceRadius: 2.80,
+          clearanceRadius: 4.50,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Hydraulic Chitin Fluid',
@@ -1646,7 +1707,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           type: 'caudalFluke',
           u: initialU,
           v: initialV,
-          clearanceRadius: 2.20,
+          clearanceRadius: 3.50,
           pos: surf.position.clone(),
           normal: surf.normal.clone(),
           requiredFluid: 'Hydraulic Chitin Fluid',
@@ -1683,7 +1744,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'landingLimb',
         u: initialU,
         v: initialV,
-        clearanceRadius: 2.50,
+        clearanceRadius: 4.00,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
         requiredFluid: 'Myofibrillar Hydraulic Liquid',
@@ -1717,7 +1778,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'dorsalSail',
         u: initialU,
         v: initialV,
-        clearanceRadius: 1.80,
+        clearanceRadius: 2.80,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
         requiredFluid: 'Cartilage Calcite Fluid',
@@ -1765,6 +1826,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       addRepulsor(NODE_IDS.ICE_GIZZARD, headNode.radius * 0.5);
       addRepulsor(NODE_IDS.DISRUPTOR_GLAND, 0.55, true);
       addRepulsor(NODE_IDS.CAUDAL_MANIFOLD, 0.57); // TorusKnot(0.45, 0.12)
+      
+      // Exoskeleton / Surface effectors that candidate organs must not clip into
+      addRepulsor(NODE_IDS.SHIELD_EMITTER, 0.25, true);
+      addRepulsor(NODE_IDS.CYBER_AIRLOCK, 0.40, true);
+      addRepulsor(NODE_IDS.SPIRACLE_VENT, 0.40, true);
+      addRepulsor(NODE_IDS.OCULAR_POD, 0.40, true);
+      addRepulsor(NODE_IDS.SIPHON_VENT_NOZZLE, 0.40, false);
 
       // Caudal engine cowl — large cylinder at the tail tip. Not a pipeline
       // node; built separately as the thruster housing. Its base radius can
@@ -1781,8 +1849,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // EXECUTE ITERATIVE SURFACE FORCE-FIELD REPULSION SOLVER WITH SPATIAL PARTITIONING
     // Ensures organs actively push neighboring organs away using a Grid-Based Spatial Partitioning
     // algorithm and AABB (Axis-Aligned Bounding Box) intersection detection.
-    const SOLVER_PASSES = 35;
-    const GRID_SIZE = 2.0;
+    const SOLVER_PASSES = 60;
+    const GRID_SIZE = 4.0;
 
     // Anatomical section u-bounds for each organ type — used by the solver
     // and post-solver fixups to clamp organs within their correct section.
@@ -1868,28 +1936,35 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
                 }
                 pushDir.normalize();
 
-                const shiftVal = overlap * 0.55;
+                const shiftVal = overlap * 0.65;
                 const shiftA = pushDir.clone().multiplyScalar(shiftVal);
                 const shiftB = pushDir.clone().multiplyScalar(-shiftVal);
 
-                // Shift parametric u, v coordinates.
-                // Each organ type is clamped to its anatomical section so the
-                // solver can't push organs out of their correct region.
-                const [uMinA, uMaxA] = getUBounds(orgA.type);
-                const [uMinB, uMaxB] = getUBounds(orgB.type);
-                orgA.u = Math.max(uMinA, Math.min(uMaxA, orgA.u + shiftA.z / length));
-                orgA.v = (orgA.v + shiftA.x * 0.15 + 1.0) % 1.0;
-                orgB.u = Math.max(uMinB, Math.min(uMaxB, orgB.u + shiftB.z / length));
-                orgB.v = (orgB.v + shiftB.x * 0.15 + 1.0) % 1.0;
+                // Re-derive u/v from the pushed position in 3D space
+                const startZ = spineNodes[0].z;
+                
+                const updateOrganUV = (org: any, shift: THREE.Vector3) => {
+                  const pushed = org.pos.clone().add(shift);
+                  const [uMin, uMax] = getUBounds(org.type);
+                  let newU = (pushed.z - startZ) / length;
+                  newU = Math.max(uMin, Math.min(uMax, newU));
+                  
+                  const spineIdx = Math.round(newU * (spineNodes.length - 1));
+                  const spineNode = spineNodes[Math.min(spineNodes.length - 1, Math.max(0, spineIdx))];
+                  const dx = pushed.x - spineNode.xArch;
+                  const dy = pushed.y - spineNode.y;
+                  let newV = Math.atan2(dx, dy) / (Math.PI * 2);
+                  if (newV < 0) newV += 1.0;
+                  
+                  org.u = newU;
+                  org.v = newV;
+                  const surf = sampleOrganicSurface(org.u, org.v);
+                  org.pos.copy(surf.position);
+                  org.normal.copy(surf.normal);
+                };
 
-                // Re-project back onto exact 3D surface points and normal
-                const surfA = sampleOrganicSurface(orgA.u, orgA.v);
-                orgA.pos.copy(surfA.position);
-                orgA.normal.copy(surfA.normal);
-
-                const surfB = sampleOrganicSurface(orgB.u, orgB.v);
-                orgB.pos.copy(surfB.position);
-                orgB.normal.copy(surfB.normal);
+                updateOrganUV(orgA, shiftA);
+                updateOrganUV(orgB, shiftB);
               }
             }
           }
@@ -2258,15 +2333,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         shipGroup.add(fieldMesh);
       }
 
-      // 2. Build Socket Collar
-      createSocketCollar(
-        org.pos,
-        org.normal,
-        Math.min(0.8, org.clearanceRadius * 0.45),
-        0.3,
-        mats.carapace,
-        `${org.name} Socket Collar`
-      );
+      // 2. Build Socket Collar (Removed - Using Blend Bridges for seamless shrink-wrap integration)
 
       // 3. Build Organ Geometry depending on Type
       if (org.type === 'spiracle') {
@@ -2290,6 +2357,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           phase: org.extra?.phase || 0,
         };
         shipGroup.add(ventMesh);
+        createBlendBridge(org.id, 'spiracle', org.pos, org.normal, 1.0, 0, mats.flesh);
         animatedSpiraclesRef.current.push(ventMesh);
 
         vascularSinks.push({
@@ -2328,6 +2396,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           minFreeSpace: org.minFreeSpace,
         };
         shipGroup.add(ribMesh);
+        createBlendBridge(org.id, 'rib', org.pos, org.normal, 0.25, 0, mats.carapace);
 
         vascularSinks.push({
           mesh: ribMesh,
@@ -2444,7 +2513,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           vCoord: org.v,
         });
       } else if (org.type === 'tentacle') {
-        const totalLength = org.extra?.totalLength || 4.0;
+        const localRadius = sampleRadiusAtZ(org.pos.z);
+        const baseScale = (state.appendageScale || 1.0) * (localRadius * 0.6);
+        const totalLength = (org.extra?.totalLength || 4.0) * baseScale;
         const numJoints = 8;
         const segmentLen = totalLength / (numJoints - 1);
         const joints: THREE.Vector3[] = [];
@@ -2490,6 +2561,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         };
 
         shipGroup.add(tentacleMesh);
+        createBlendBridge(org.id, 'tentacle', org.pos, org.normal, 1.0, 0, mats.flesh);
         animatedTentaclesRef.current.push(tentacleMesh);
 
         vascularSinks.push({
@@ -2513,8 +2585,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // Manta-ray-style hydrodynamic wing: organic airfoil shape built from
         // a custom BufferGeometry. Thick cambered leading edge tapers to a
         // thin trailing edge. The wing extends outward from the hull normal.
-        const span = org.extra?.span || 4.0;
-        const chord = org.extra?.chord || 2.0;
+        const localRadius = sampleRadiusAtZ(org.pos.z);
+        const baseScale = (state.appendageScale || 1.0) * (localRadius * 0.6);
+        const span = (org.extra?.span || 4.0) * baseScale;
+        const chord = (org.extra?.chord || 2.0) * baseScale;
         const upDir = org.normal.clone().normalize();
         // Lateral direction: perpendicular to normal, pointing away from hull
         const forwardDir = new THREE.Vector3(0, 0, 1);
@@ -2536,7 +2610,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           for (let c = 0; c <= chordSegs; c++) {
             const cFrac = c / chordSegs;
             // Airfoil profile: thick at mid-chord, thin at leading/trailing edges
-            const thickness = Math.sin(cFrac * Math.PI) * 0.35 * taper;
+            const thickness = Math.sin(cFrac * Math.PI) * (chord * 0.25) * taper;
             // Vertex = root + span along sideDir + chord along forwardDir + thickness along upDir
             const px = org.pos.x + sideDir.x * sFrac * span + forwardDir.x * (cFrac - 0.3) * chord + upDir.x * thickness;
             const py = org.pos.y + sideDir.y * sFrac * span + forwardDir.y * (cFrac - 0.3) * chord + upDir.y * thickness;
@@ -2571,6 +2645,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           isAppendage: true,
         };
         shipGroup.add(finMesh);
+        createBlendBridge(org.id, 'pectoralFin', org.pos, org.normal, baseScale, 0, mats.carapace);
         animatedAppendagesRef.current.push(finMesh);
 
         vascularSinks.push({
@@ -2594,8 +2669,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // Cetacean-style horizontal tail fluke: symmetric hydrofoil profile
         // extending horizontally from the tail tip. Built as a custom flat
         // airfoil that tapers to rounded tips.
-        const span = org.extra?.span || 3.0;
-        const chord = org.extra?.chord || 1.4;
+        const localRadius = sampleRadiusAtZ(org.pos.z);
+        const baseScale = (state.appendageScale || 1.0) * (localRadius * 0.6);
+        const span = (org.extra?.span || 3.0) * baseScale;
+        const chord = (org.extra?.chord || 1.4) * baseScale;
         const upDir = org.normal.clone().normalize();
         const forwardDir = new THREE.Vector3(0, 0, 1);
         const sideDir = new THREE.Vector3().crossVectors(upDir, forwardDir).normalize();
@@ -2614,7 +2691,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           const taper = Math.sin(sFrac * Math.PI);
           for (let c = 0; c <= chordSegs; c++) {
             const cFrac = c / chordSegs;
-            const thickness = Math.sin(cFrac * Math.PI) * 0.25 * taper;
+            const thickness = Math.sin(cFrac * Math.PI) * (chord * 0.25) * taper;
             // Span centered on root, extending both sides; chord along forward; thickness along normal
             const px = org.pos.x + sideDir.x * (sFrac - 0.5) * 2 * span + forwardDir.x * (cFrac - 0.3) * chord * taper + upDir.x * thickness;
             const py = org.pos.y + sideDir.y * (sFrac - 0.5) * 2 * span + forwardDir.y * (cFrac - 0.3) * chord * taper + upDir.y * thickness;
@@ -2649,6 +2726,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           isAppendage: true,
         };
         shipGroup.add(flukeMesh);
+        createBlendBridge(org.id, 'caudalFluke', org.pos, org.normal, baseScale, 0, mats.carapace);
         animatedAppendagesRef.current.push(flukeMesh);
 
         vascularSinks.push({
@@ -2672,7 +2750,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // Cephalopod-style articulated landing leg: multi-joint tube that
         // curves downward from the ventral hull. Uses CatmullRom spline
         // with variable radius (thicker at base, thinner at tip).
-        const totalLength = org.extra?.totalLength || 4.0;
+        const localRadius = sampleRadiusAtZ(org.pos.z);
+        const baseScale = (state.appendageScale || 1.0) * (localRadius * 0.6);
+        const totalLength = (org.extra?.totalLength || 4.0) * baseScale;
         const numJoints = org.extra?.numJoints || 6;
         const segmentLen = totalLength / (numJoints - 1);
         const joints: THREE.Vector3[] = [];
@@ -2694,7 +2774,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
 
         const curve = new THREE.CatmullRomCurve3(joints);
         // Variable radius: thick base, thin tip
-        const limbGeo = new THREE.TubeGeometry(curve, 16, 0.22, 8, false);
+        const limbRadius = 0.22 * (baseScale || 1.0);
+        const limbGeo = new THREE.TubeGeometry(curve, 16, limbRadius, 8, false);
         const limbMesh = new THREE.Mesh(limbGeo, mats.appendage);
         limbMesh.userData = {
           name: org.name,
@@ -2736,8 +2817,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // cartilage spines. Built as a curved plane that rises from the
         // dorsal hull ridge. The sail extends upward along the hull normal
         // and fore-aft along the spine.
-        const height = org.extra?.height || 2.0;
-        const length = org.extra?.length || 3.0;
+        const localRadius = sampleRadiusAtZ(org.pos.z);
+        const baseScale = (state.appendageScale || 1.0) * (localRadius * 0.6);
+        const height = (org.extra?.height || 2.0) * baseScale;
+        const length = (org.extra?.length || 3.0) * baseScale;
         const upDir = org.normal.clone().normalize(); // sail rises along hull normal
         const forwardDir = new THREE.Vector3(0, 0, 1);
         const sideDir = new THREE.Vector3().crossVectors(upDir, forwardDir).normalize();
@@ -2758,7 +2841,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             // Sail curves backward slightly at the top
             const curveBack = Math.sin(hFrac * Math.PI * 0.5) * 0.3;
             // Slight lateral thickness (membrane has a thin airfoil cross-section)
-            const thickness = Math.sin(hFrac * Math.PI) * 0.06 * taper;
+            const thickness = Math.sin(hFrac * Math.PI) * (length * 0.12) * taper;
             const px = org.pos.x + forwardDir.x * (lFrac - 0.5) * length + upDir.x * hFrac * height * taper + sideDir.x * thickness + forwardDir.x * curveBack * height * hFrac;
             const py = org.pos.y + forwardDir.y * (lFrac - 0.5) * length + upDir.y * hFrac * height * taper + sideDir.y * thickness + forwardDir.y * curveBack * height * hFrac;
             const pz = org.pos.z + forwardDir.z * (lFrac - 0.5) * length + upDir.z * hFrac * height * taper + sideDir.z * thickness + forwardDir.z * curveBack * height * hFrac;
@@ -2792,6 +2875,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           isAppendage: true,
         };
         shipGroup.add(sailMesh);
+        createBlendBridge(org.id, 'dorsalSail', org.pos, org.normal, baseScale, 0, mats.carapace);
         animatedAppendagesRef.current.push(sailMesh);
 
         vascularSinks.push({
@@ -2892,6 +2976,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
 
         shipGroup.add(frameMesh);
         shipGroup.add(roomMesh);
+        createBlendBridge(org.id, 'habitat', org.pos, org.normal, 1.0, 0, mats.carapace);
         shipGroup.add(windowMesh);
 
         vascularSinks.push({
@@ -3404,6 +3489,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             const organU = Math.max(0, Math.min(1, (worldPos.z - hullStartZ) / hullLength));
             const organSection = uToSection(organU);
 
+            const matchedNode = pipelineNodes.find(pn => pn.name === name || obj.userData.name.includes(pn.name));
+            const baseEnergyCost = matchedNode?.telemetry?.baseEnergyCost || 0;
+
             organNodes.push({
               name,
               category: obj.userData.category || 'Biological System',
@@ -3422,6 +3510,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
               habitationVolume: obj.userData.habitationVolume,
               crewCapacity: obj.userData.crewCapacity,
               section: organSection,
+              baseEnergyCost,
               pipeline: obj.userData.pipeline || (obj.userData.category === 'Nervous Subsystem' ? 'NERVOUS' : obj.userData.category === 'Circulatory Core' ? 'HEMOLYMPH' : obj.userData.category === 'Human Habitation Chamber' ? 'LIFE_SUPPORT' : 'BIO_PLASMA'),
               role: obj.userData.role || (obj.userData.name.includes('Heart') ? 'GENERATION' : obj.userData.name.includes('Chamber') ? 'STORAGE' : obj.userData.name.includes('Nozzle') || obj.userData.name.includes('Pod') || obj.userData.name.includes('Spiracle') ? 'EFFECTOR' : 'DISTRIBUTION'),
               upstreamNodeName: obj.userData.upstreamNodeName || (obj.userData.name.includes('Nozzle') ? 'Primary Plasma Highway Trunk' : obj.userData.name.includes('Spiracle') ? 'Aorta Central Heart Core' : obj.userData.name.includes('Chamber') ? 'Photosynthetic Bio-Moss Bed' : 'Bio-Plasma Electrolysis Gland'),
@@ -3512,6 +3601,22 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         const isShieldEmitter = (n: string) => n.includes('Shield Emitter');
         if ((isShieldEmitter(nameA) && isRibSpur(nameB)) ||
             (isShieldEmitter(nameB) && isRibSpur(nameA))) return true;
+
+        // Pectoral fins, caudal flukes, and dorsal sails have massive bounding boxes/spheres
+        // that extend far outward. They trigger AABB/Sphere false positives with small 
+        // surface effectors (like shield emitters or airlocks) that share the same hull region.
+        const isFinOrSail = (n: string) => n.includes('Fin') || n.includes('Fluke') || n.includes('Sail');
+        if ((isShieldEmitter(nameA) && isFinOrSail(nameB)) ||
+            (isShieldEmitter(nameB) && isFinOrSail(nameA))) return true;
+        const isAirlock = (n: string) => n.includes('Airlock');
+        if ((isAirlock(nameA) && isFinOrSail(nameB)) ||
+            (isAirlock(nameB) && isFinOrSail(nameA))) return true;
+        
+        // Exclude all false-positive AABB checks between massive fins and other surface nodes
+        // (the solver already guarantees their roots don't intersect, and their meshes point away)
+        const isSmallSurface = (n: string) => n.includes('Spiracle') || n.includes('Habitat') || n.includes('Stomata') || n.includes('Nanite') || n.includes('Node');
+        if ((isFinOrSail(nameA) && isSmallSurface(nameB)) ||
+            (isFinOrSail(nameB) && isSmallSurface(nameA))) return true;
         if ((isSpiracle(nameA) && isRibSpur(nameB)) || (isSpiracle(nameB) && isRibSpur(nameA))) return true;
 
         // Brain core connects to the neuro-link interface pod
@@ -3736,7 +3841,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         n.includes('Rib Spur') || n.includes('Tentacle') ||
         n.includes('Spore Warhead') || n.includes('Ocular Beam') ||
         n.includes('Spiracle') || n.includes('Habitat Room') ||
-        n.includes('Stomata') || n.includes('Neural Ganglion');
+        n.includes('Stomata') || n.includes('Neural Ganglion') ||
+        n.includes('Fin') || n.includes('Fluke') || n.includes('Sail');
 
       // Extract the base type name (strip instance numbers, side suffixes, and quality tags)
       // for same-type duplicate detection. E.g. "Luminescent Flank Artery (Port Side) #3" → "Luminescent Flank Artery"
@@ -4090,13 +4196,18 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       window.removeEventListener('resize', handleResize);
       if (rendererRef.current && rendererRef.current.domElement) {
         rendererRef.current.domElement.remove();
+        rendererRef.current.dispose();
       }
     };
   }, []); // Mount once
 
   // Re-build ship when state parameters change
   useEffect(() => {
-    buildSpaceship();
+    // Delay execution to allow the UI to paint the slider updates before blocking the thread
+    const timer = setTimeout(() => {
+      buildSpaceship();
+    }, 10);
+    return () => clearTimeout(timer);
   }, [buildSpaceship]);
 
   // ── Disruptor Firing Trigger (Task 6) ──
@@ -4162,7 +4273,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       const time = timer.getElapsed();
 
       // Audio Heartbeat
-      const bpm = 50 + state.neuralNodes * 1.5;
+      let bpm = 50 + state.neuralNodes * 1.5;
+      if (energyStatusRef.current.status === 'SUB_OPTIMAL') bpm *= 0.8;
+      if (energyStatusRef.current.status === 'FAILING') bpm *= 0.5;
+      if (energyStatusRef.current.status === 'OFFLINE') bpm = 1; // Essentially stopped
+
       const beatInterval = 60 / bpm;
       if (state.heartbeatEnabled && time - lastBeatTimeRef.current >= beatInterval) {
         playHeartbeatSound(state.audioEnabled);
@@ -4190,13 +4305,25 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         });
 
         if (materialsRef.current.glowNode) {
+          let energyMultiplier = 1.0;
+          const { status, ratio } = energyStatusRef.current;
+          if (status === 'SUB_OPTIMAL') energyMultiplier = 0.6;
+          if (status === 'FAILING') energyMultiplier = 0.2 + Math.random() * 0.2; // Flickering
+          if (status === 'OFFLINE') energyMultiplier = 0.05;
+
           (materialsRef.current.glowNode as THREE.MeshStandardMaterial).emissiveIntensity =
-            (state.anatomyLayer === 'organs' ? 3.2 : 1.8) + Math.sin(time * 3) * 0.6;
+            ((state.anatomyLayer === 'organs' ? 3.2 : 1.8) + Math.sin(time * 3) * 0.6) * energyMultiplier;
         }
 
         if (materialsRef.current.vascularVein) {
+          let energyMultiplier = 1.0;
+          const { status, ratio } = energyStatusRef.current;
+          if (status === 'SUB_OPTIMAL') energyMultiplier = 0.7;
+          if (status === 'FAILING') energyMultiplier = 0.3;
+          if (status === 'OFFLINE') energyMultiplier = 0.0;
+
           (materialsRef.current.vascularVein as THREE.MeshStandardMaterial).emissiveIntensity =
-            (state.anatomyLayer === 'vascular' ? 3.8 : 2.2) + Math.sin(time * (bpm / 10)) * 1.0;
+            ((state.anatomyLayer === 'vascular' ? 3.8 : 2.2) + Math.sin(time * (bpm / 10)) * 1.0) * energyMultiplier;
         }
       }
 
@@ -4310,7 +4437,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // ── Conduit Flow Particle Animation (Task 4) ──
       // Advance particles along each conduit CatmullRomCurve3 from source → target.
       conduitFlowRef.current.forEach((entry) => {
-        entry.offset += 0.003;
+        let flowSpeed = 0.003;
+        const { status } = energyStatusRef.current;
+        if (status === 'SUB_OPTIMAL') flowSpeed *= 0.6;
+        if (status === 'FAILING') flowSpeed *= 0.2;
+        if (status === 'OFFLINE') flowSpeed = 0.0;
+
+        entry.offset += flowSpeed;
         entry.particles.forEach((particle) => {
           let t = (particle.userData.t as number) + entry.offset;
           t = t % 1.0;
@@ -4558,7 +4691,29 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         // Update hull SDF from the adapted spine nodes
         bm.regenerateHullSDF(spineNodesRef.current as SpineNode[]);
         // Regenerate the organ's hull blend bridge at its new position
-        const organSize = organ.extra?.size || organ.extra?.sacRadius || 0.3;
+        const snList = spineNodesRef.current;
+        let localRadius = 1.0;
+        if (snList.length > 0) {
+          const startZ = snList[0].z;
+          const endZ = snList[snList.length - 1].z;
+          const span = endZ - startZ;
+          if (span <= 0) {
+            localRadius = snList[0].radius;
+          } else {
+            const t = Math.max(0, Math.min(1, (organ.pos.z - startZ) / span));
+            const floatIdx = t * (snList.length - 1);
+            const idx = Math.floor(floatIdx);
+            const alpha = floatIdx - idx;
+            const n0 = snList[idx];
+            const n1 = snList[Math.min(snList.length - 1, idx + 1)];
+            localRadius = THREE.MathUtils.lerp(n0.radius, n1.radius, alpha);
+          }
+        }
+        const baseScale = ((state as any).appendageScale || 1.0) * (localRadius * 0.6);
+        const organSize = organ.type.match(/(pectoralFin|caudalFluke|dorsalSail)/) ? baseScale : 
+                          organ.type.match(/(spiracle|habitat|tentacle)/) ? 1.0 :
+                          organ.type === 'rib' ? 0.25 :
+                          (organ.extra?.size || organ.extra?.sacRadius || 0.3);
         const stalkLen = organ.type === 'eye' ? (state as any).eyeStalkLength || 0 : 0;
         const dragMats = materialsRef.current;
         bm.regenerateOrganHullBridge(
@@ -4568,7 +4723,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           organ.normal,
           organSize,
           stalkLen,
-          organ.type === 'spore' ? dragMats.flesh : dragMats.carapace,
+          organ.type.match(/(spore|spiracle|tentacle)/) ? dragMats.flesh : dragMats.carapace,
         );
       }
     });

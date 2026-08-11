@@ -22,6 +22,7 @@ import { AppState, TargetNodeInfo, ViewMode, AnatomyLayer, ShipSection, SHIP_SEC
 import { LCG } from '../utils/nurbs';
 import { playScanChirp } from '../utils/audio';
 import { PIPELINE_NAMES } from '../utils/pipelineGraph';
+import { calculateEnergyGeneration, calculateEnergyConsumption, evaluateEnergyStatus, getOrganEnergyStatus } from '../utils/energy';
 
 interface TelemetryPanelProps {
   state: AppState;
@@ -39,7 +40,7 @@ interface TelemetryPanelProps {
 
 type CategoryTab = 'ALL' | 'SECTIONS' | 'HABITATION' | 'CIRCULATORY' | 'PROPULSION' | 'SENSORY' | 'RESPIRATION' | 'WEAPONS' | 'APPENDAGES';
 
-export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
+export const TelemetryPanel: React.FC<TelemetryPanelProps> = React.memo(({
   state,
   targetNode,
   organList,
@@ -64,6 +65,10 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
   const o2Yield = Math.round(state.habitatChambers * 95 + state.spiracleCount * 15);
   const naniteRepair = (0.75 + state.plateOverlap * 0.12).toFixed(2);
   const gammaAbs = Math.round(state.plateCoverage * 0.65 + 15);
+
+  const energyGeneration = calculateEnergyGeneration(state);
+  const energyConsumption = calculateEnergyConsumption(organList);
+  const globalEnergyStatus = evaluateEnergyStatus(energyGeneration, energyConsumption);
 
   const numCrossU = state.segments + 1;
   const numCrossV = 8;
@@ -145,6 +150,21 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-center">
+        <div className="col-span-2 bg-cyan-950/40 p-2 rounded border border-cyan-500/10 flex flex-col gap-1">
+          <div className="flex justify-between items-center px-1">
+            <span className="text-[10px] text-cyan-400 uppercase">Energy Grid (MW)</span>
+            <span className={`text-[10px] uppercase font-bold ${
+              globalEnergyStatus === 'OPTIMAL' ? 'text-green-400' :
+              globalEnergyStatus === 'SUB_OPTIMAL' ? 'text-yellow-400' :
+              globalEnergyStatus === 'FAILING' ? 'text-orange-500' : 'text-red-500'
+            }`}>{globalEnergyStatus.replace('_', ' ')}</span>
+          </div>
+          <div className="flex justify-between font-mono text-sm px-1">
+            <span className="text-cyan-300">GEN: {energyGeneration.toFixed(1)}</span>
+            <span className="text-cyan-300">/</span>
+            <span className="text-cyan-300">LOAD: {energyConsumption.toFixed(1)}</span>
+          </div>
+        </div>
         <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
           <span className="text-[10px] text-cyan-400 block uppercase">Neuro-Sync Coherence</span>
           <span className="text-sm font-mono font-bold text-cyan-300">{neuralSync}%</span>
@@ -213,6 +233,18 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
             <p className="text-xs text-cyan-400 leading-relaxed">{targetNode.desc}</p>
             
             <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-cyan-300 pt-1 border-t border-cyan-500/10">
+              <div>
+                <span className="text-cyan-500 block">Energy Load:</span>
+                <span className="text-cyan-400 font-bold">{targetNode.baseEnergyCost ? targetNode.baseEnergyCost.toFixed(1) + ' MW' : 'Passive'}</span>
+              </div>
+              <div>
+                <span className="text-cyan-500 block">Status:</span>
+                <span className={`font-bold ${
+                  getOrganEnergyStatus(targetNode, globalEnergyStatus) === 'OPTIMAL' ? 'text-green-400' :
+                  getOrganEnergyStatus(targetNode, globalEnergyStatus) === 'SUB_OPTIMAL' ? 'text-yellow-400' :
+                  getOrganEnergyStatus(targetNode, globalEnergyStatus) === 'FAILING' ? 'text-orange-500' : 'text-red-500'
+                }`}>{getOrganEnergyStatus(targetNode, globalEnergyStatus).replace('_', ' ')}</span>
+              </div>
               <div>
                 <span className="text-cyan-500 block">Metabolic Output:</span>
                 <span className="text-cyan-400">{targetNode.metabolicRate || '24% Normal'}</span>
@@ -586,5 +618,5 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = ({
       </div>
     </aside>
   );
-};
+});
 

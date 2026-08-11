@@ -309,9 +309,34 @@ export function opDisplace(sdf: SDF, displacement: (p: THREE.Vector3) => number)
 
 // ── SDF Bounding & Sampling ──
 
+const sdfGridPool: Record<number, Float32Array[]> = {};
+
+function getSDFGridBuffer(size: number): Float32Array {
+  const len = size * size * size;
+  if (!sdfGridPool[len]) {
+    sdfGridPool[len] = [];
+  }
+  const pool = sdfGridPool[len];
+  if (pool.length > 0) {
+    return pool.pop()!;
+  }
+  return new Float32Array(len);
+}
+
+export function releaseSDFGridBuffer(buffer: Float32Array) {
+  const len = buffer.length;
+  if (!sdfGridPool[len]) {
+    sdfGridPool[len] = [];
+  }
+  if (sdfGridPool[len].length < 100) {
+    sdfGridPool[len].push(buffer);
+  }
+}
+
 /**
  * Sample an SDF on a regular 3D grid and return the values as a typed array.
  * Used by marching cubes and dual contouring for mesh extraction.
+ * IMPORTANT: The caller must call `releaseSDFGridBuffer` when done.
  *
  * @param sdf The signed distance function to sample.
  * @param bounds Axis-aligned bounding box to sample within.
@@ -324,7 +349,7 @@ export function sampleSDFGrid(
   resolution: number,
 ): Float32Array {
   const size = resolution + 1;
-  const values = new Float32Array(size * size * size);
+  const values = getSDFGridBuffer(size);
   const min = bounds.min;
   const max = bounds.max;
   const step = new THREE.Vector3(

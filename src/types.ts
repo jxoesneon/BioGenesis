@@ -1,4 +1,5 @@
 export type LoftProfile = 'trilobed' | 'spine' | 'circular' | 'star';
+export type IntakeType = 'baleen-ram' | 'crushing-mandibles' | 'lamprey-siphon' | 'stealth-slit' | 'spore-filter';
 export type SymmetryType = 'bilateral' | 'radial-5' | 'radial-3' | 'biradial' | 'spherical' | 'asymmetrical';
 export type ViewMode = 'organic' | 'wireframe' | 'xray';
 export type AnatomyLayer = 'full' | 'exoskeleton' | 'vascular' | 'organs' | 'muscular';
@@ -55,10 +56,12 @@ export interface AppState {
   pectoralFins: number;      // Manta-ray wings on thoracic flanks (0 to 4)
   caudalFlukes: number;      // Whale-tail horizontal flukes at tail tip (0 to 2)
   landingLimbs: number;      // Cephalopod-articulated ventral landing legs (0 to 6)
+  appendageScale: number;    // Proportional scale multiplier for appendages
   dorsalSail: number;        // Sailfish-style dorsal stabilizer fin (0 to 3)
   
   // Biological Symmetry & Morphology
   symmetryType: SymmetryType;
+  intakeType: IntakeType;
 
   // Biological Spine & Armor Features
   spinalArch: number;         // Spine vertical curvature (-5 to 5)
@@ -126,6 +129,7 @@ export interface OrganPipelineNode {
     outputRate?: string;
     operatingPressure?: string;
     efficiencyCoherence?: string;
+    baseEnergyCost?: number;
   };
 }
 
@@ -160,6 +164,9 @@ export interface TargetNodeInfo {
   // Anatomical section this organ belongs to (derived from its u-position)
   section?: ShipSection;
 
+  baseEnergyCost?: number;
+  energyStatus?: string;
+  
   // Cyber-Organic Bio-Telemetry Extensions
   speciesClass?: string;
   neuralSyncCoherence?: string;

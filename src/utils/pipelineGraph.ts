@@ -92,6 +92,7 @@ interface NodeDef {
     outputRate?: string;
     operatingPressure?: string;
     efficiencyCoherence?: string;
+    baseEnergyCost?: number;
   };
 }
 
@@ -112,7 +113,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.35, z]; // ventral interior, thoracic
     },
     downstreamNodeIds: [NODE_IDS.PLASMA_BLADDER],
-    telemetry: { outputRate: '850 kW Electrolysis', operatingPressure: '140 Bar' },
+    telemetry: { outputRate: '850 kW Electrolysis', operatingPressure: '140 Bar' , baseEnergyCost: 50 },
   },
   {
     id: NODE_IDS.PLASMA_BLADDER,
@@ -127,7 +128,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.25, z]; // ventral interior
     },
     downstreamNodeIds: [NODE_IDS.PLASMA_TRUNK],
-    telemetry: { operatingPressure: '140 Bar Fuel Buffer' },
+    telemetry: { operatingPressure: '140 Bar Fuel Buffer' , baseEnergyCost: 5 },
   },
   {
     id: NODE_IDS.PLASMA_TRUNK,
@@ -142,7 +143,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.15, z]; // near spine, ventral
     },
     downstreamNodeIds: [NODE_IDS.CAUDAL_MANIFOLD, NODE_IDS.DISRUPTOR_GLAND],
-    telemetry: { outputRate: '2,400 L/min Flow' },
+    telemetry: { outputRate: '2,400 L/min Flow' , baseEnergyCost: 2 },
   },
   {
     id: NODE_IDS.CAUDAL_MANIFOLD,
@@ -157,7 +158,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy, z]; // centered on spine at stern
     },
     downstreamNodeIds: [NODE_IDS.SIPHON_VENT_NOZZLE],
-    telemetry: { outputRate: 'Hydrodynamic Splitting' },
+    telemetry: { outputRate: 'Hydrodynamic Splitting' , baseEnergyCost: 2 },
   },
   {
     id: NODE_IDS.SIPHON_VENT_NOZZLE,
@@ -172,7 +173,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.4, z]; // posterior ventral exhaust
     },
     downstreamNodeIds: [],
-    telemetry: { outputRate: '1,700 kN Hydro-Pulse' },
+    telemetry: { outputRate: '1,700 kN Hydro-Pulse' , baseEnergyCost: 120 },
   },
   {
     id: NODE_IDS.DISRUPTOR_GLAND,
@@ -188,7 +189,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.5, sy + r * 0.35, z];
     },
     downstreamNodeIds: [],
-    telemetry: { outputRate: '450 MW Thermal Burst' },
+    telemetry: { outputRate: '450 MW Thermal Burst' , baseEnergyCost: 200 },
   },
 
   // ── Pipeline 2: Hemolymph Circulation & Thermal Regulation (§2.2) ──
@@ -205,7 +206,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.05, z]; // centered, slightly dorsal
     },
     downstreamNodeIds: [NODE_IDS.HEMOLYMPH_ATRIUM],
-    telemetry: { outputRate: '68 BPM Systolic Stroke' },
+    telemetry: { outputRate: '68 BPM Systolic Stroke' , baseEnergyCost: 40 },
   },
   {
     id: NODE_IDS.HEMOLYMPH_ATRIUM,
@@ -220,7 +221,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.2, z]; // dorsal interior, close to heart
     },
     downstreamNodeIds: [NODE_IDS.AORTA_HIGHWAY],
-    telemetry: { operatingPressure: '18.5 Bar Antifreeze Buffer' },
+    telemetry: { operatingPressure: '18.5 Bar Antifreeze Buffer' , baseEnergyCost: 5 },
   },
   {
     id: NODE_IDS.AORTA_HIGHWAY,
@@ -250,7 +251,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.5, sy, z]; // lateral interior
     },
     downstreamNodeIds: [NODE_IDS.SPIRACLE_VENT],
-    telemetry: { outputRate: 'Capillary Delivery' },
+    telemetry: { outputRate: 'Capillary Delivery' , baseEnergyCost: 2 },
   },
   {
     id: NODE_IDS.SPIRACLE_VENT,
@@ -265,7 +266,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.85, sy + r * 0.4, z]; // dorsal flank, on surface (thoracic)
     },
     downstreamNodeIds: [],
-    telemetry: { outputRate: '820 W/m² IR Radiation' },
+    telemetry: { outputRate: '820 W/m² IR Radiation' , baseEnergyCost: 15 },
   },
 
   // ── Pipeline 3: Nervous & Cybernetic Synaptic System (§2.3) ──
@@ -282,7 +283,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.25, z]; // anterior dorsal interior
     },
     downstreamNodeIds: [NODE_IDS.NEURO_LINK],
-    telemetry: { efficiencyCoherence: '98.4% Synaptic Coherence' },
+    telemetry: { efficiencyCoherence: '98.4% Synaptic Coherence' , baseEnergyCost: 80 },
   },
   {
     id: NODE_IDS.NEURO_LINK,
@@ -297,7 +298,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.1, z]; // sub-cranial interior
     },
     downstreamNodeIds: [NODE_IDS.AXON_CORD],
-    telemetry: { efficiencyCoherence: 'Graphene Fiber Plug' },
+    telemetry: { efficiencyCoherence: 'Graphene Fiber Plug' , baseEnergyCost: 30 },
   },
   {
     id: NODE_IDS.AXON_CORD,
@@ -312,7 +313,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.15, z]; // just dorsal of spine center
     },
     downstreamNodeIds: [NODE_IDS.OCULAR_POD, NODE_IDS.MUSCLE_TENDON],
-    telemetry: { efficiencyCoherence: '120 m/s Nerve Impulse' },
+    telemetry: { efficiencyCoherence: '120 m/s Nerve Impulse' , baseEnergyCost: 10 },
   },
   {
     id: NODE_IDS.OCULAR_POD,
@@ -327,7 +328,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.6, sy + r * 0.3, z]; // anterior dorsal flank, on surface
     },
     downstreamNodeIds: [],
-    telemetry: { efficiencyCoherence: 'Multispectral Vision' },
+    telemetry: { efficiencyCoherence: 'Multispectral Vision' , baseEnergyCost: 20 },
   },
   {
     id: NODE_IDS.MUSCLE_TENDON,
@@ -342,7 +343,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.4, sy - r * 0.1, z]; // lateral, slightly ventral
     },
     downstreamNodeIds: [],
-    telemetry: { efficiencyCoherence: 'FABRIK IK Actuation' },
+    telemetry: { efficiencyCoherence: 'FABRIK IK Actuation' , baseEnergyCost: 60 },
   },
 
   // ── Pipeline 4: Endosymbiotic Life Support & Metabolism (§2.4) ──
@@ -359,7 +360,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.35, z]; // ventral mouth interior
     },
     downstreamNodeIds: [NODE_IDS.BIO_MOSS],
-    telemetry: { outputRate: '12.5 kg/min Mineral Ore' },
+    telemetry: { outputRate: '12.5 kg/min Mineral Ore' , baseEnergyCost: 45 },
   },
   {
     id: NODE_IDS.BIO_MOSS,
@@ -374,7 +375,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy, z]; // centered in body
     },
     downstreamNodeIds: [NODE_IDS.HABITAT_CHAMBER],
-    telemetry: { outputRate: '420 L/min O₂ Output' },
+    telemetry: { outputRate: '420 L/min O₂ Output' , baseEnergyCost: 10 },
   },
   {
     id: NODE_IDS.HABITAT_CHAMBER,
@@ -389,7 +390,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.3, sy, z]; // lateral interior (thoracic)
     },
     downstreamNodeIds: [NODE_IDS.CYBER_AIRLOCK],
-    telemetry: { operatingPressure: '1.0 atm / 12 Crew' },
+    telemetry: { operatingPressure: '1.0 atm / 12 Crew' , baseEnergyCost: 25 },
   },
   {
     id: NODE_IDS.CYBER_AIRLOCK,
@@ -421,7 +422,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy, z]; // on spine center
     },
     downstreamNodeIds: [NODE_IDS.CARAPACE_PLATE],
-    telemetry: { outputRate: 'C3 NURBS Structural Load' },
+    telemetry: { outputRate: 'C3 NURBS Structural Load' , baseEnergyCost: 1 },
   },
   {
     id: NODE_IDS.CARAPACE_PLATE,
@@ -436,7 +437,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy + r * 0.9, z]; // dorsal surface
     },
     downstreamNodeIds: [NODE_IDS.BIO_NANITE_BED],
-    telemetry: { outputRate: '85 Gy/hr Gamma Shield' },
+    telemetry: { outputRate: '85 Gy/hr Gamma Shield' , baseEnergyCost: 5 },
   },
   {
     id: NODE_IDS.BIO_NANITE_BED,
@@ -451,7 +452,7 @@ const NODE_DEFS: NodeDef[] = [
       return [0, sy - r * 0.3, z]; // sub-dermal, ventral of center
     },
     downstreamNodeIds: [NODE_IDS.SHIELD_EMITTER],
-    telemetry: { outputRate: '1.2 m³/s Breach Clotting' },
+    telemetry: { outputRate: '1.2 m³/s Breach Clotting' , baseEnergyCost: 90 },
   },
   {
     id: NODE_IDS.SHIELD_EMITTER,
@@ -466,7 +467,7 @@ const NODE_DEFS: NodeDef[] = [
       return [r * 0.9, sy, z]; // hull perimeter, on surface
     },
     downstreamNodeIds: [],
-    telemetry: { outputRate: '450 MW Kinetic Deflection' },
+    telemetry: { outputRate: '450 MW Kinetic Deflection' , baseEnergyCost: 250 },
   },
 ];
 

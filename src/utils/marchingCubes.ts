@@ -18,7 +18,7 @@
  */
 
 import * as THREE from 'three';
-import { SDF, sampleSDFGrid } from './sdf';
+import { SDF, sampleSDFGrid, releaseSDFGridBuffer } from './sdf';
 
 // ── Marching Cubes Lookup Tables ──
 
@@ -383,24 +383,8 @@ export function marchingCubes(
     return values[(i * size + j) * size + k];
   };
 
-  // Helper: compute world position of grid point (i, j, k)
-  const getWorldPos = (i: number, j: number, k: number): THREE.Vector3 => {
-    return new THREE.Vector3(
-      min.x + i * step.x,
-      min.y + j * step.y,
-      min.z + k * step.z,
-    );
-  };
-
-  // Helper: linear interpolation along an edge
-  const interpolate = (i1: number, j1: number, k1: number, i2: number, j2: number, k2: number): THREE.Vector3 => {
-    const v1 = getValue(i1, j1, k1);
-    const v2 = getValue(i2, j2, k2);
-    const p1 = getWorldPos(i1, j1, k1);
-    const p2 = getWorldPos(i2, j2, k2);
-    const t = (isoLevel - v1) / (v2 - v1);
-    return p1.lerp(p2, Math.max(0, Math.min(1, t)));
-  };
+  const edgeVerts = new Float32Array(12 * 3);
+  const edgeMask = new Uint8Array(12);
 
   // Iterate over all cells
   for (let i = 0; i < resolution; i++) {
@@ -420,14 +404,27 @@ export function marchingCubes(
         const edges = EDGE_TABLE[cubeIndex];
         if (edges === 0) continue;
 
+        edgeMask.fill(0);
+
         // Compute edge intersections
-        const edgeVerts: (THREE.Vector3 | null)[] = new Array(12).fill(null);
         for (let e = 0; e < 12; e++) {
           if (edges & (1 << e)) {
             const [c1, c2] = EDGE_VERTICES[e];
             const [i1, j1, k1] = CORNER_OFFSETS[c1];
             const [i2, j2, k2] = CORNER_OFFSETS[c2];
-            edgeVerts[e] = interpolate(i + i1, j + j1, k + k1, i + i2, j + j2, k + k2);
+            
+            const gi1 = i + i1, gj1 = j + j1, gk1 = k + k1;
+            const gi2 = i + i2, gj2 = j + j2, gk2 = k + k2;
+
+            const v1 = getValue(gi1, gj1, gk1);
+            const v2 = getValue(gi2, gj2, gk2);
+            let t = (isoLevel - v1) / (v2 - v1);
+            t = Math.max(0, Math.min(1, t));
+
+            edgeVerts[e * 3 + 0] = min.x + (gi1 + t * (gi2 - gi1)) * step.x;
+            edgeVerts[e * 3 + 1] = min.y + (gj1 + t * (gj2 - gj1)) * step.y;
+            edgeVerts[e * 3 + 2] = min.z + (gk1 + t * (gk2 - gk1)) * step.z;
+            edgeMask[e] = 1;
           }
         }
 
@@ -437,14 +434,14 @@ export function marchingCubes(
           const e0 = triList[t];
           const e1 = triList[t + 1];
           const e2 = triList[t + 2];
-          const v0 = edgeVerts[e0];
-          const v1 = edgeVerts[e1];
-          const v2 = edgeVerts[e2];
-          if (v0 && v1 && v2) {
+          
+          if (edgeMask[e0] && edgeMask[e1] && edgeMask[e2]) {
             const baseIdx = positions.length / 3;
-            positions.push(v0.x, v0.y, v0.z);
-            positions.push(v1.x, v1.y, v1.z);
-            positions.push(v2.x, v2.y, v2.z);
+            positions.push(
+              edgeVerts[e0 * 3], edgeVerts[e0 * 3 + 1], edgeVerts[e0 * 3 + 2],
+              edgeVerts[e1 * 3], edgeVerts[e1 * 3 + 1], edgeVerts[e1 * 3 + 2],
+              edgeVerts[e2 * 3], edgeVerts[e2 * 3 + 1], edgeVerts[e2 * 3 + 2]
+            );
             indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
           }
         }
@@ -516,6 +513,8 @@ export function surfaceNets(
   const cubeEdges: [number, number][] = EDGE_VERTICES;
 
   // First pass: compute vertex positions for each crossing cell
+  const accum = new THREE.Vector3();
+  const worldPos = new THREE.Vector3();
   for (let i = 0; i < resolution; i++) {
     for (let j = 0; j < resolution; j++) {
       for (let k = 0; k < resolution; k++) {
@@ -529,9 +528,8 @@ export function surfaceNets(
         if (cubeIndex === 0 || cubeIndex === 255) continue;
 
         // Compute averaged vertex position from edge intersections
-        const center = new THREE.Vector3(i + 0.5, j + 0.5, k + 0.5);
         let count = 0;
-        const accum = new THREE.Vector3();
+        accum.set(0, 0, 0);
 
         const edges = EDGE_TABLE[cubeIndex];
         for (let e = 0; e < 12; e++) {
@@ -542,11 +540,9 @@ export function surfaceNets(
             const v1 = getValue(i + i1, j + j1, k + k1);
             const v2 = getValue(i + i2, j + j2, k + k2);
             const t = (isoLevel - v1) / (v2 - v1);
-            accum.add(new THREE.Vector3(
-              i + i1 + t * (i2 - i1),
-              j + j1 + t * (j2 - j1),
-              k + k1 + t * (k2 - k1),
-            ));
+            accum.x += i + i1 + t * (i2 - i1);
+            accum.y += j + j1 + t * (j2 - j1);
+            accum.z += k + k1 + t * (k2 - k1);
             count++;
           }
         }
@@ -554,7 +550,7 @@ export function surfaceNets(
         if (count > 0) {
           accum.divideScalar(count);
           // Convert grid coords to world coords
-          const worldPos = new THREE.Vector3(
+          worldPos.set(
             min.x + accum.x * step.x,
             min.y + accum.y * step.y,
             min.z + accum.z * step.z,
@@ -694,8 +690,13 @@ export function sdfToMesh(
 
   const values = sampleSDFGrid(sdf, bounds, resolution);
 
+  let geometry: THREE.BufferGeometry;
   if (method === 'surface-nets') {
-    return surfaceNets(values, resolution, bounds, options);
+    geometry = surfaceNets(values, resolution, bounds, options);
+  } else {
+    geometry = marchingCubes(values, resolution, bounds, options);
   }
-  return marchingCubes(values, resolution, bounds, options);
+  
+  releaseSDFGridBuffer(values);
+  return geometry;
 }

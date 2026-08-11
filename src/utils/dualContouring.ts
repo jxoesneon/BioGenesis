@@ -21,7 +21,7 @@
  */
 
 import * as THREE from 'three';
-import { SDF, sampleSDFGrid } from './sdf';
+import { SDF, sampleSDFGrid, releaseSDFGridBuffer } from './sdf';
 
 // ── QEF (Quadratic Error Function) Minimization ──
 
@@ -378,5 +378,6 @@ export function dualContouring(
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+  releaseSDFGridBuffer(values);
   return geo;
 }

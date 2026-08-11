@@ -11,7 +11,7 @@ interface ActionFooterProps {
   setMobilePanel: (panel: 'genetics' | 'telemetry' | 'none') => void;
 }
 
-export const ActionFooter: React.FC<ActionFooterProps> = ({
+export const ActionFooter: React.FC<ActionFooterProps> = React.memo(({
   state,
   onResetView,
   onToggleAutoRotate,
@@ -68,4 +68,4 @@ export const ActionFooter: React.FC<ActionFooterProps> = ({
       </div>
     </footer>
   );
-};
+});

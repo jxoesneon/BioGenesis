@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sliders, Eye, EyeOff, Bone, Dna, Palette, Bookmark, FlaskConical, Spline, Activity, Compass, X } from 'lucide-react';
-import { AppState, LoftProfile, SymmetryType, ThemeKey, OrganPipelineType } from '../types';
+import { AppState, LoftProfile, SymmetryType, IntakeType, ThemeKey, OrganPipelineType } from '../types';
 import { PIPELINE_NAMES, PIPELINE_COLORS } from '../utils/pipelineGraph';
 
 interface GeneticsDrawerProps {
@@ -14,7 +14,7 @@ interface GeneticsDrawerProps {
   setMobilePanel: (panel: 'genetics' | 'telemetry' | 'none') => void;
 }
 
-export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
+export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = React.memo(({
   state,
   onUpdateState,
   onSaveDNA_A,
@@ -82,6 +82,26 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
             <option value="biradial">4. Biradial Quad-Orthogonal (Ctenophore / Comb Jelly)</option>
             <option value="spherical">5. Spherical Omnidirectional (Radiolarian / Volvox)</option>
             <option value="asymmetrical">6. Chiral Spiral / Fibonacci (Gastropod / Snail / Sponge)</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramIntakeType" className="flex items-center gap-1 font-bold text-cyan-300">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" /> Energy Intake Maw
+            </label>
+          </div>
+          <select
+            id="paramIntakeType"
+            value={state.intakeType}
+            onChange={(e) => onUpdateState({ intakeType: e.target.value as IntakeType })}
+            className="w-full bg-cyan-950/40 text-cyan-300 text-xs font-mono rounded p-1.5 border border-cyan-500/40 focus:outline-none cursor-pointer"
+          >
+            <option value="baleen-ram">1. Baleen Ram-Scoop (Leviathan)</option>
+            <option value="crushing-mandibles">2. Crushing Mandibles (Harvester)</option>
+            <option value="lamprey-siphon">3. Lamprey Siphon (Frigate)</option>
+            <option value="stealth-slit">4. Stealth Slit (Interceptor)</option>
+            <option value="spore-filter">5. Spore Filter-Web (Carrier)</option>
           </select>
         </div>
 
@@ -518,6 +538,23 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
 
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-cyan-400">
+            <label htmlFor="paramAppendageScale">Appendage Base Scale</label>
+            <span className="font-mono text-cyan-400">{state.appendageScale.toFixed(1)}x</span>
+          </div>
+          <input
+            type="range"
+            id="paramAppendageScale"
+            min="0.5"
+            max="3.0"
+            step="0.1"
+            value={state.appendageScale}
+            onChange={(e) => onUpdateState({ appendageScale: parseFloat(e.target.value) })}
+            className="w-full accent-cyan-500 bg-cyan-950/50"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-cyan-400">
             <label htmlFor="paramPectoralFins">Pectoral Hydrodynamic Fins</label>
             <span className="font-mono text-cyan-400">{state.pectoralFins}</span>
           </div>
@@ -664,4 +701,4 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = ({
       </div>
     </aside>
   );
-};
+});
