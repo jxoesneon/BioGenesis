@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
+// 3D render disabled — engineering view is the active workspace.
+// Re-enable by swapping EngineeringView back to Canvas3D below.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AppState, TargetNodeInfo, ViewMode, ThemeKey, AnatomyLayer, ShipSection } from './types';
@@ -9,7 +11,10 @@ import { Header } from './components/Header';
 import { GeneticsDrawer } from './components/GeneticsDrawer';
 import { TelemetryPanel } from './components/TelemetryPanel';
 import { ActionFooter } from './components/ActionFooter';
-import { Canvas3D } from './components/Canvas3D';
+// 3D render disabled — engineering view is the active workspace.
+// Re-enable by swapping EngineeringView back to Canvas3D below.
+// import { Canvas3D } from './components/Canvas3D';
+import { EngineeringView } from './components/EngineeringView';
 import { CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -55,6 +60,31 @@ export default function App() {
     showConduitNervous: true,
     showConduitLifeSupport: true,
     showConduitArmorDefense: true,
+
+    // Biological System Debug Visibility — all visible by default
+    showSystemHull: true,
+    showSystemSkeletal: true,
+    showSystemVascular: true,
+    showSystemNeural: true,
+    showSystemRespiratory: true,
+    showSystemCirculatory: true,
+    showSystemBioPlasma: true,
+    showSystemLifeSupport: true,
+    showSystemArmorDefense: true,
+    showSystemSurfaceOrgans: true,
+    showSystemAppendages: true,
+    showSystemPropulsion: true,
+    showSystemMuscular: true,
+    showSystemLighting: true,
+    showSystemParticles: true,
+    showSystemOverlays: true,
+    showSystemDebug: true,
+
+    // Neural Compute Architecture toggles
+    showSystemNeuralVentral: false,
+    showCommandRoom: true,
+    showNerveBranches: true,
+
     fireDisruptors: 0,
 
     theme: 'abyssal',
@@ -218,22 +248,11 @@ export default function App() {
         onMutateSeed={handleMutateSeed}
         onExportOBJ={handleExportOBJ}
         onSelectPreset={handleSelectPreset}
+        showSceneControls={false}
       />
 
-      <Canvas3D
-        state={state}
-        targetNode={targetNode}
-        onSelectTargetNode={setTargetNode}
-        onShowToast={showToast}
-        onUpdateOrganList={setOrganList}
-        canvasRef={canvasRef}
-        sceneRef={sceneRef}
-        cameraRef={cameraRef}
-        rendererRef={rendererRef}
-        controlsRef={controlsRef}
-        shipGroupRef={shipGroupRef}
-        highlightedSection={highlightedSection}
-      />
+      {/* 3D render disabled — engineering view is the active workspace */}
+      <EngineeringView state={state} onUpdateState={updateState} />
 
       <GeneticsDrawer
         state={state}
@@ -267,6 +286,7 @@ export default function App() {
         onTakeSnapshot={handleTakeSnapshot}
         mobilePanel={mobilePanel}
         setMobilePanel={setMobilePanel}
+        showSceneControls={false}
       />
 
       {/* Notification Toast */}

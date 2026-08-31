@@ -9,6 +9,9 @@ import { themes, generateBioSkinTexture } from '../utils/theme';
 import { playHeartbeatSound, playScanChirp } from '../utils/audio';
 import { buildPipelineNodes, buildPipelineConnections, ShipGeometryContext, NODE_IDS, PIPELINE_COLORS } from '../utils/pipelineGraph';
 import { calculateEnergyGeneration, calculateEnergyConsumption, evaluateEnergyStatus } from '../utils/energy';
+import { computeEngineGeometry, type EngineGeometryParams } from '../utils/propulsionSizing';
+import { solveOverlapsPBD, checkPostAdaptationOverlaps, deterministicVDistribution } from '../utils/organPlacement';
+import { getSymmetryVCoords, testBilateralSymmetry, testSymmetry, bilateralMirrorV, areBilateralMirrors, symmetryCorrectV, symmetryGroupSize } from '../utils/symmetry';
 import {
   initPipeline,
   generateOrgan,
@@ -23,6 +26,20 @@ import {
   BlendBridgeManager,
   SpineNode,
 } from '../utils/organBlending';
+import {
+  calculateBrainEQ,
+  calculateBrainMass,
+  calculateBrainRadius,
+  NEURAL_CONSTANTS,
+  ORGAN_COMPUTE_DEMAND,
+} from '../utils/neuralCompute';
+import {
+  generateNerveBranch,
+  calculateMurrayBranchRadius,
+  findNearestOrgans,
+  calculateOrganNerveRadius,
+  calculateMaxBranchLengthForShip,
+} from '../utils/nerveBranching';
 
 interface Canvas3DProps {
   state: AppState;
@@ -39,46 +56,7 @@ interface Canvas3DProps {
   highlightedSection?: ShipSection | null;
 }
 
-// Helper function resolving natural biological symmetry coordinate distribution across hull parameter V [0..1]
-const getSymmetryVCoords = (symmetry: SymmetryType, stepIdx: number = 0): { vCoords: number[]; names: string[] } => {
-  switch (symmetry) {
-    case 'radial-5':
-      return {
-        vCoords: [0.0, 0.2, 0.4, 0.6, 0.8],
-        names: ['Dorsal Ray I', 'Dorsal-Right Ray II', 'Ventral-Right Ray III', 'Ventral-Left Ray IV', 'Dorsal-Left Ray V']
-      };
-    case 'radial-3':
-      return {
-        vCoords: [0.0, 0.333, 0.667],
-        names: ['Dorsal Branch I', 'Right Ventral Branch II', 'Left Ventral Branch III']
-      };
-    case 'biradial':
-      return {
-        vCoords: [0.0, 0.25, 0.5, 0.75],
-        names: ['Dorsal Plane', 'Starboard Plane', 'Ventral Plane', 'Port Plane']
-      };
-    case 'spherical':
-      return {
-        vCoords: [0.0, 0.166, 0.333, 0.5, 0.666, 0.833],
-        names: ['Anterior Zenith', 'Dorsal Equatorial', 'Ventral Equatorial', 'Posterior Nadir', 'Port Lateral', 'Starboard Lateral']
-      };
-    case 'asymmetrical': {
-      const phi = 0.618033988749895; // Golden ratio conjugate
-      const v1 = (stepIdx * phi) % 1.0;
-      const v2 = (v1 + 0.382) % 1.0;
-      return {
-        vCoords: [v1, v2],
-        names: [`Chiral Spiral Node #${stepIdx + 1}-A`, `Chiral Spiral Node #${stepIdx + 1}-B`]
-      };
-    }
-    case 'bilateral':
-    default:
-      return {
-        vCoords: [0.18, 0.68],
-        names: ['Port Side', 'Starboard Side']
-      };
-  }
-};
+// getSymmetryVCoords is imported from ../utils/symmetry (extracted for testability)
 
 export const Canvas3D: React.FC<Canvas3DProps> = ({
   state,
@@ -107,6 +85,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
   const materialsRef = useRef<Record<string, THREE.Material>>({});
   const sporeParticlesRef = useRef<THREE.Points | null>(null);
   const particleSystemRef = useRef<THREE.Points | null>(null);
+  const gridHelperRef = useRef<THREE.GridHelper | null>(null);
+  const showDebugRef = useRef<boolean>(true);
   const particleVelocitiesRef = useRef<THREE.Vector3[]>([]);
   const lastBeatTimeRef = useRef<number>(0);
   const rimLightRef = useRef<THREE.PointLight | null>(null);
@@ -151,6 +131,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
   const sampleSurfacePosRef = useRef<((u: number, v: number) => THREE.Vector3) | null>(null);
   const sampleSurfaceRef = useRef<((u: number, v: number) => { position: THREE.Vector3; normal: THREE.Vector3; u: number; v: number }) | null>(null);
   const adaptHullRef = useRef<((reprojectOrgans?: boolean) => void) | null>(null);
+  const deformHullForCommandRoomRef = useRef<(() => void) | null>(null);
   const blendBridgeManagerRef = useRef<BlendBridgeManager | null>(null);
 
   // ── Transform gizmo refs ──
@@ -406,12 +387,14 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // Both halves have zero slope at peakU → C1-continuous join. noseRound < 1
     // rounds the cranium; tailExp > 1 draws the tail out to a fine point.
     // Seed-driven variation keeps every ship's proportions unique.
-    const peakU = 0.30 + rng() * 0.08;         // max girth at 30–38% from nose
-    const noseRound = 0.70 + rng() * 0.22;     // < 1 = domed organic cranium
-    const tailExp = 1.7 + rng() * 1.0;         // > 1 = long fine tail taper
-    const headBulgeAmt = 0.08 + rng() * 0.08;  // cranial dome accent
-    const neckPinchAmt = 0.05 + rng() * 0.05;  // waist behind the head
-    const tailLift = 0.3 + rng() * 0.4;        // tail tip up-sweep fraction
+    // DEBUG: All silhouette params set to deterministic minimums (no rng variation)
+    // so each factor can be isolated and tuned individually.
+    const peakU = 0.30;                        // max girth at 30% from nose (min)
+    const noseRound = 0.70;                    // < 1 = domed organic cranium (min)
+    const tailExp = 1.7;                       // > 1 = long fine tail taper (min)
+    const headBulgeAmt = 0.20;                 // cranial dome accent (min)
+    const neckPinchAmt = 0.28;                 // waist behind the head (min)
+    const tailLift = 0.3;                      // tail tip up-sweep fraction (min)
 
     for (let i = 0; i <= numCrossU; i++) {
       const uProg = i / numCrossU;
@@ -445,8 +428,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           f = Math.pow(Math.cos((Math.PI / 2) * ((uProg - peakU) / (1 - peakU))), tailExp);
         }
         // Cranial dome + neck waist give the head a readable identity.
-        const headG = Math.exp(-((uProg - peakU * 0.30) ** 2) / (2 * 0.05 ** 2));
-        const neckG = Math.exp(-((uProg - peakU * 0.68) ** 2) / (2 * 0.05 ** 2));
+        // Wider sigma (0.08 vs 0.05) spreads the neck pinch across a broader
+        // U range so the waist reads as a distinct anatomical region, not a
+        // brief dip that adaptHull can erase.
+        const headG = Math.exp(-((uProg - peakU * 0.30) ** 2) / (2 * 0.07 ** 2));
+        const neckG = Math.exp(-((uProg - peakU * 0.68) ** 2) / (2 * 0.08 ** 2));
         f *= 1 + headBulgeAmt * headG - neckPinchAmt * neckG;
         r = f * state.thoraxWidth * 1.18;
       }
@@ -492,6 +478,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     {
       const MAX_INCLINE_DEG = 45;
       const MAX_SLOPE = Math.tan((MAX_INCLINE_DEG * Math.PI) / 180); // 1.0
+      // The neck region (U ≈ 0.12–0.30) needs steeper transitions to preserve
+      // the dramatic neck pinch. A 65° limit here lets the waist carve in
+      // without being flattened by the body-wide 45° constraint.
+      const NECK_INCLINE_DEG = 65;
+      const NECK_MAX_SLOPE = Math.tan((NECK_INCLINE_DEG * Math.PI) / 180); // ~2.14
+      const NECK_U_MIN = 0.12;
+      const NECK_U_MAX = 0.32;
       const CONVERGENCE_PASSES = 3;
       // Body region: exclude the tip closure zones (first/last 10% of nodes).
       // The tips need to close sharply; the body needs the 45° ceiling.
@@ -510,8 +503,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           const dy = next.y - cur.y;
           // Euclidean slope — correct formula for surface of revolution incline
           const slope = Math.sqrt(dr * dr + dy * dy) / dz;
-          if (slope > MAX_SLOPE) {
-            const scale = MAX_SLOPE / slope;
+          // Use relaxed slope in the neck region, standard elsewhere
+          const uMid = (i + 0.5) / (spineNodes.length - 1);
+          const limit = (uMid >= NECK_U_MIN && uMid <= NECK_U_MAX) ? NECK_MAX_SLOPE : MAX_SLOPE;
+          if (slope > limit) {
+            const scale = limit / slope;
             next.radius = cur.radius + dr * scale;
             next.y = cur.y + dy * scale;
             next.baseRadius = next.radius;
@@ -526,8 +522,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           const dr = prev.radius - cur.radius;
           const dy = prev.y - cur.y;
           const slope = Math.sqrt(dr * dr + dy * dy) / dz;
-          if (slope > MAX_SLOPE) {
-            const scale = MAX_SLOPE / slope;
+          const uMid = (i - 0.5) / (spineNodes.length - 1);
+          const limit = (uMid >= NECK_U_MIN && uMid <= NECK_U_MAX) ? NECK_MAX_SLOPE : MAX_SLOPE;
+          if (slope > limit) {
+            const scale = limit / slope;
             prev.radius = cur.radius + dr * scale;
             prev.y = cur.y + dy * scale;
             prev.baseRadius = prev.radius;
@@ -581,6 +579,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // ridge crest. Both accent terms have zero slope at the lateral line
       // (sinA = 0) so the section stays C1-smooth. Spherical archetypes keep
       // their intentional roundness.
+      // Amplitudes increased from 12%/5% to 22%/15% so the flattening reads
+      // at ship scale — a circular tube is the #2 grub factor after radius.
       let hF = 1.0;
       let wF = 1.0;
       if (state.symmetryType !== 'spherical') {
@@ -588,8 +588,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         const bellyT = Math.exp(-((clampedU - 0.45) ** 2) / (2 * 0.16 ** 2));
         const dorsal = Math.max(0, sinA);
         const ventral = Math.max(0, -sinA);
-        hF = 0.84 + 0.12 * bellyT * ventral * ventral + 0.05 * Math.pow(dorsal, 6);
-        wF = 1.0 + 0.05 * bellyT;
+        hF = 0.72 + 0.22 * bellyT * ventral * ventral + 0.08 * Math.pow(dorsal, 6);
+        wF = 1.0 + 0.15 * bellyT;
       }
 
       return new THREE.Vector3(
@@ -619,6 +619,25 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       if (normal.lengthSq() < 0.0001) normal.set(0, 1, 0);
 
       return { position: pos, normal, Tu, Tv, u: clampedU, v: clampedV };
+    };
+
+    // Helper: symmetrize the surface normal for dorsal (v≈0.25) / ventral (v≈0.75)
+    // midline positions. The trilobed loft profile (cos(3·angle)) has a non-zero
+    // derivative at angle=π/2 and 3π/2, which tilts the computed normal sideways
+    // (gives it an X-component) even though the surface is bilaterally symmetric
+    // there. This projection onto the X=0 plane restores the expected purely-
+    // vertical normal for elements that sit on the dorsal/ventral ridge.
+    const symmetrizeMidlineNormal = (v: number, normal: THREE.Vector3): THREE.Vector3 => {
+      const DV = 0.25;
+      const onDorsal = Math.abs(v - DV) < 0.02 || Math.abs(v - (1 - DV)) < 0.02;
+      if (onDorsal) {
+        const projected = normal.clone();
+        projected.x = 0;
+        if (projected.lengthSq() > 0.0001) projected.normalize();
+        else projected.copy(normal);
+        return projected;
+      }
+      return normal.clone();
     };
 
     // Build standard high-precision 3D BufferGeometry for Organic Carapace
@@ -660,6 +679,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     hullGeometry.setIndex(indices);
     hullGeometry.computeVertexNormals();
 
+    // ── Command Room Hull Deformation ──
+    // MOVED: The deformation now runs after adaptHull() rebuilds the geometry.
+    // See deformHullForCommandRoom() called below.
+
     // Optional Catmull-Clark subdivision for smoother hull surface with
     // semi-sharp crease preservation (see subdivision.ts).
     // Applied when the pipeline config has subdivision enabled.
@@ -667,6 +690,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       ? subdivideHull(hullGeometry, pipelineConfigRef.current)
       : hullGeometry;
 
+    if (state.showSystemHull) {
     const carapaceMesh = new THREE.Mesh(finalHullGeometry, mats.carapace);
     carapaceMesh.userData = {
       name: 'Regular 3D Smooth Organic Carapace',
@@ -678,12 +702,14 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       isHull: true, // Structural shell — not interactable, click-through to surface organs
     };
     shipGroup.add(carapaceMesh);
+    } // end showSystemHull
 
     // ── Anatomical Section Overlay Bands ──
     // Build a translucent overlay mesh for each ship section (cranial, neck,
     // thoracic, caudal, tail) by sampling the hull surface across the section's
     // u-range. Overlays are always present in the scene; a separate effect
     // toggles visibility/opacity based on `highlightedSection`.
+    if (state.showSystemOverlays) {
     const sectionOverlayGroup = new THREE.Group();
     sectionOverlayGroup.name = '__sectionOverlays';
     const sectionBandV = 28; // cross-sectional resolution
@@ -743,6 +769,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     }
     shipGroup.add(sectionOverlayGroup);
     sectionOverlayRef.current = sectionOverlayGroup;
+    } // end showSystemOverlays
 
     // Helper: Create Flanged Organic Socket Collar to guarantee zero mesh discontinuity
     const createSocketCollar = (
@@ -798,7 +825,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     };
 
     // 2. OVERLAPPING CHITIN ARMOR PLATES
-    if (state.plateOverlap > 0) {
+    // Dorsal armor scales — ∩-shaped (dome) arches sitting on the hull at v=0.25.
+    // CylinderGeometry theta sweep:
+    //   theta=0→+X,  π/2→+Z,  π→-X,  3π/2→-Z  (in cylinder local XZ plane)
+    // After rotateX(π/2):  +X→+X,  +Z→-Y,  -X→-X,  -Z→+Y
+    // Centering on theta=3π/2 maps to +Y (up) → dome shape.
+    // Normals point outward from the cylinder axis = upward for the dome.
+    if (state.plateOverlap > 0 && state.showSystemSkeletal) {
       const plateCount = Math.min(state.plateOverlap, segments);
       for (let p = 0; p < plateCount; p++) {
         const uProg = 0.15 + (p / (plateCount + 1)) * 0.7;
@@ -807,12 +840,19 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         if (!node) continue;
 
         const plateRadius = node.radius * 1.15;
-        const plateGeo = new THREE.CylinderGeometry(plateRadius * 0.88, plateRadius, 0.75, 12, 1, true, -Math.PI * 0.42, Math.PI * 0.84);
+        // ∩ dome arc: Three.js CylinderGeometry uses x=r·sin(θ), z=r·cos(θ).
+        // After rotateX(π/2): θ=π → -Z → +Y (up).
+        // thetaStart = π - 0.42π = 0.58π, thetaLength = 0.84π
+        const plateGeo = new THREE.CylinderGeometry(plateRadius * 0.88, plateRadius, 0.75, 12, 1, true, Math.PI * 0.58, Math.PI * 0.84);
         plateGeo.rotateX(Math.PI / 2);
         const plateMesh = new THREE.Mesh(plateGeo, mats.carapace);
 
+        // Center on the dorsal ridge — symmetrize the normal to cancel the
+        // sideways tilt from the trilobed loft profile at v=0.25.
+        const offsetDir = symmetrizeMidlineNormal(0.25, surf.normal);
         plateMesh.position.copy(surf.position);
-        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), surf.normal);
+        plateMesh.position.addScaledVector(offsetDir, -plateRadius * 0.15);
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), offsetDir);
         plateMesh.quaternion.copy(quat);
 
         plateMesh.userData = {
@@ -886,6 +926,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     energyStatusRef.current = { status: globalEnergyStatus, ratio: energyGen / (energyLoad || 1) };
 
     // Pipeline 1: Bio-Plasma Energy & Propulsion System
+    if (state.showSystemBioPlasma) {
     const plasmaGlandGeo = new THREE.DodecahedronGeometry(heartNode.radius * 0.55, 1);
     const plasmaGlandMesh = new THREE.Mesh(plasmaGlandGeo, mats.glowNode);
     plasmaGlandMesh.position.set(...(nodeMap.get(NODE_IDS.PLASMA_GLAND)!.position));
@@ -940,8 +981,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       outputCapacity: nodeMap.get(NODE_IDS.PLASMA_TRUNK)!.telemetry.outputRate,
     };
     shipGroup.add(plasmaTubeMesh);
+    } // end showSystemBioPlasma
 
     // Pipeline 2: Hemolymph Circulation System
+    if (state.showSystemCirculatory) {
     const heartGeo = new THREE.IcosahedronGeometry(heartNode.radius * 0.65, 2);
     const heartMesh = new THREE.Mesh(heartGeo, mats.heartCore);
     heartMesh.position.set(...(nodeMap.get(NODE_IDS.HEART_CORE)!.position));
@@ -975,9 +1018,40 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       operatingPressure: '18.5 Bar',
     };
     shipGroup.add(atriumMesh);
+    } // end showSystemCirculatory
 
     // Pipeline 3: Nervous & Cybernetic Synaptic System
-    const brainGeo = new THREE.IcosahedronGeometry(headNode.radius * 0.6, 2);
+    if (state.showSystemNeural) {
+    // ── Brain Dynamic Sizing (Haller's Rule + Jerison Allometry) ──
+    // Approximate ship volume from spine nodes as a Riemann sum of cylindrical
+    // segments: Σ π * r² * Δz. For non-spherical ships, the hull cross-section
+    // is elliptical (flattened ventrally, widened at the belly), so we apply a
+    // correction factor (wF * avg_hF) derived from the hull shaping parameters
+    // at each spine node's U-coordinate. This prevents ~15-20% volume
+    // overestimation that would otherwise skew brain EQ/mass/radius.
+    let shipVolumeApprox = 0;
+    for (let si = 0; si < spineNodes.length; si++) {
+      const sn = spineNodes[si];
+      let areaCorrection = 1.0;
+      if (state.symmetryType !== 'spherical') {
+        const uProg = si / Math.max(1, spineNodes.length - 1);
+        const bellyT = Math.exp(-((uProg - 0.45) ** 2) / (2 * 0.16 ** 2));
+        const wF = 1.0 + 0.15 * bellyT;
+        // Average hF over the cross-section (integrated over angle):
+        // hF = 0.72 + 0.22 * bellyT * ventral² + 0.08 * dorsal⁶
+        // avg(ventral²) = 1/4, avg(dorsal⁶) = 5/32
+        const avgHF = 0.7325 + 0.055 * bellyT;
+        areaCorrection = wF * avgHF;
+      }
+      shipVolumeApprox += Math.PI * sn.radius * sn.radius * areaCorrection * (length / Math.max(1, spineNodes.length));
+    }
+    const brainEQ = calculateBrainEQ(shipVolumeApprox);
+    const brainMass = calculateBrainMass(shipVolumeApprox, brainEQ);
+    const brainRadius = calculateBrainRadius(brainMass);
+    // Scale up the biologically-tiny radius so the brain is visible relative
+    // to the head node (visual scale factor, not biological).
+    const brainVisualRadius = Math.max(brainRadius, headNode.radius * 0.35);
+    const brainGeo = new THREE.IcosahedronGeometry(brainVisualRadius, 2);
     const brainMesh = new THREE.Mesh(brainGeo, mats.glowNode);
     brainMesh.position.set(...(nodeMap.get(NODE_IDS.BRAIN_CORE)!.position));
     brainMesh.userData = {
@@ -987,12 +1061,16 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       neuralFreq: '98.4% Synaptic Coherence',
       pipeline: 'NERVOUS',
       role: 'GENERATION',
-      downstreamNodeNames: ['Human Neuro-Link Interface Pod', 'Spinal Axon Cord Highway'],
+      downstreamNodeNames: ['Human Neuro-Link Interface Pod', 'Spinal Axon Cord Highway', 'Ocular Beam Stalk Pods'],
       operatingPressure: '8.8 Bar Bio-Electric',
       efficiencyCoherence: nodeMap.get(NODE_IDS.BRAIN_CORE)!.telemetry.efficiencyCoherence,
+      brainEQ: brainEQ.toFixed(2),
+      brainMass: brainMass.toFixed(3),
+      brainRadius: brainVisualRadius.toFixed(3),
     };
     shipGroup.add(brainMesh);
 
+    // Neuro-Link Pod is human-built hardware — fixed human-scale size regardless of brain size
     const neuroLinkGeo = new THREE.CylinderGeometry(0.3, 0.35, 0.4, 8);
     const neuroLinkMesh = new THREE.Mesh(neuroLinkGeo, mats.carapace);
     neuroLinkMesh.position.set(...(nodeMap.get(NODE_IDS.NEURO_LINK)!.position));
@@ -1008,15 +1086,33 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     };
     shipGroup.add(neuroLinkMesh);
 
-    // 3D Spinal Axon Nerve Cord Tube
+    // 3D Spinal Axon Nerve Cord Tube — follows the vertebral column (spine nodes)
+    // The cord runs through the neural foramen (hole) of each vertebra, so it must
+    // follow the same path as the vertebrae along the spine centerline.
+    // The cord starts at the brain (posterior to the command room), passes through
+    // the neuro-link pod (at the back wall), then follows the vertebral column
+    // posteriorly to the tail. It does NOT extend anteriorly past the brain —
+    // the brain is the anterior terminus of the central nervous system.
     const axonCordPos = nodeMap.get(NODE_IDS.AXON_CORD)!.position;
-    const axonCurve = new THREE.CatmullRomCurve3([
+    const cordPoints: THREE.Vector3[] = [
       brainMesh.position,
       neuroLinkMesh.position,
-      new THREE.Vector3(axonCordPos[0], axonCordPos[1], axonCordPos[2]),
-      new THREE.Vector3(0, spineNodes[spineNodes.length - 1].y + 0.4, spineNodes[spineNodes.length - 1].z)
-    ]);
-    const axonTubeGeo = new THREE.TubeGeometry(axonCurve, 32, 0.12, 8, false);
+    ];
+    // Only include spine nodes posterior to the neuro-link (z >= neuro-link z).
+    // The brain and neuro-link are behind the command room in the Neck section,
+    // so cranial spine nodes (anterior to the brain) are excluded — the CNS
+    // starts at the brain, not at the nose.
+    const neuroLinkZ = neuroLinkMesh.position.z;
+    for (let s = 0; s < spineNodes.length; s++) {
+      const sn = spineNodes[s];
+      if (sn.z < neuroLinkZ - 0.01) continue; // skip nodes anterior to neuro-link
+      cordPoints.push(new THREE.Vector3(0, sn.y, sn.z));
+    }
+    // Extend slightly past the last vertebra to the tail tip
+    cordPoints.push(new THREE.Vector3(0, spineNodes[spineNodes.length - 1].y + 0.4, spineNodes[spineNodes.length - 1].z));
+    const axonCurve = new THREE.CatmullRomCurve3(cordPoints);
+    const axonTubeRadius = 0.12;
+    const axonTubeGeo = new THREE.TubeGeometry(axonCurve, 64, axonTubeRadius, 8, false);
     const axonTubeMesh = new THREE.Mesh(axonTubeGeo, mats.glowNode);
     axonTubeMesh.userData = {
       name: 'Spinal Axon Cord Highway',
@@ -1025,12 +1121,42 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       pipeline: 'NERVOUS',
       role: 'DISTRIBUTION',
       upstreamNodeName: 'Primary Ganglion Brain Core',
-      downstreamNodeNames: ['Ocular Beam Stalk Pods', 'Biomechanical Muscle Tendons'],
+      downstreamNodeNames: ['Biomechanical Muscle Tendons'],
       efficiencyCoherence: nodeMap.get(NODE_IDS.AXON_CORD)!.telemetry.efficiencyCoherence,
     };
     shipGroup.add(axonTubeMesh);
 
+    // ── Ventral Nerve Cord (optional, separate toggle) ──
+    // Second nerve cord along the ventral midline (v=0.75), per Neural Compute
+    // spec §4.1. Has its own wire cost. Guarded by showSystemNeuralVentral.
+    if (state.showSystemNeuralVentral) {
+      const ventralStartSurf = sampleOrganicSurface(0.05, 0.75);
+      const ventralEndSurf = sampleOrganicSurface(0.95, 0.75);
+      const ventralMidSurf = sampleOrganicSurface(0.50, 0.75);
+      const ventralCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(ventralStartSurf.position.x, ventralStartSurf.position.y, ventralStartSurf.position.z),
+        new THREE.Vector3(ventralMidSurf.position.x, ventralMidSurf.position.y, ventralMidSurf.position.z),
+        new THREE.Vector3(ventralEndSurf.position.x, ventralEndSurf.position.y, ventralEndSurf.position.z),
+      ]);
+      const ventralTubeRadius = axonTubeRadius * 0.8;
+      const ventralTubeGeo = new THREE.TubeGeometry(ventralCurve, 48, ventralTubeRadius, 8, false);
+      const ventralTubeMesh = new THREE.Mesh(ventralTubeGeo, mats.glowNode);
+      ventralTubeMesh.userData = {
+        name: 'Ventral Nerve Cord Highway',
+        category: 'Nervous Subsystem',
+        desc: 'Second myelinated nerve trunk along the ventral midline (v=0.75) for autonomic and motor relay.',
+        pipeline: 'NERVOUS',
+        role: 'DISTRIBUTION',
+        upstreamNodeName: 'Primary Ganglion Brain Core',
+        downstreamNodeNames: ['Ventral Ganglion Clusters'],
+        isVentralCord: true,
+      };
+      shipGroup.add(ventralTubeMesh);
+    }
+    } // end showSystemNeural
+
     // Pipeline 4: Endosymbiotic Life Support System (Energy Intake)
+    if (state.showSystemLifeSupport) {
     const intakeGroup = new THREE.Group();
     const gizzardPos = nodeMap.get(NODE_IDS.ICE_GIZZARD)!.position;
     intakeGroup.position.set(...gizzardPos);
@@ -1115,12 +1241,16 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       outputCapacity: nodeMap.get(NODE_IDS.BIO_MOSS)!.telemetry.outputRate,
     };
     shipGroup.add(bioMossMesh);
+    } // end showSystemLifeSupport
 
     // ── Pipeline Graph: 7 Missing Organ Nodes (from pipelineGraph.ts) ──
 
     // 1. Caudal Manifold Distribution Trunk (BIO_PLASMA, DISTRIBUTION)
+    // Scaled dynamically from engine geometry params (proportional to cowl radius)
+    if (state.showSystemBioPlasma) {
     const caudalManifoldPos = nodeMap.get(NODE_IDS.CAUDAL_MANIFOLD)!.position;
-    const caudalManifoldGeo = new THREE.TorusKnotGeometry(0.45, 0.12, 64, 8, 2, 3);
+    const manifoldScale = Math.max(0.5, spineNodes[spineNodes.length - 1].radius * 0.8);
+    const caudalManifoldGeo = new THREE.TorusKnotGeometry(0.45 * manifoldScale, 0.12 * manifoldScale, 64, 8, 2, 3);
     const caudalManifoldMesh = new THREE.Mesh(caudalManifoldGeo, mats.glowNode);
     caudalManifoldMesh.position.set(caudalManifoldPos[0], caudalManifoldPos[1], caudalManifoldPos[2]);
     caudalManifoldMesh.userData = {
@@ -1134,8 +1264,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       outputCapacity: nodeMap.get(NODE_IDS.CAUDAL_MANIFOLD)!.telemetry.outputRate,
     };
     shipGroup.add(caudalManifoldMesh);
+    } // end showSystemBioPlasma (caudal manifold)
 
     // 2. Bio-Plasma Disruptor Glands (BIO_PLASMA, EFFECTOR) — clickable for firing FX
+    if (state.showSystemBioPlasma) {
     const disruptorPos = nodeMap.get(NODE_IDS.DISRUPTOR_GLAND)!.position;
     const disruptorGeo = new THREE.OctahedronGeometry(0.5, 1);
     const disruptorMesh = new THREE.Mesh(disruptorGeo, mats.thrusterCore);
@@ -1171,8 +1303,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     };
     shipGroup.add(disruptorMirrorMesh);
     disruptorMeshesRef.current.push(disruptorMirrorMesh);
+    } // end showSystemBioPlasma (disruptors)
 
     // 3. Central Aorta Highway (HEMOLYMPH, DISTRIBUTION) — tube along spine
+    if (state.showSystemVascular) {
     const aortaPos = nodeMap.get(NODE_IDS.AORTA_HIGHWAY)!.position;
     const aortaPathPoints: THREE.Vector3[] = [];
     for (let i = 0; i < spineNodes.length; i++) {
@@ -1193,8 +1327,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       outputCapacity: nodeMap.get(NODE_IDS.AORTA_HIGHWAY)!.telemetry.outputRate,
     };
     shipGroup.add(aortaTubeMesh);
+    } // end showSystemVascular (aorta)
 
     // 4. Cyber-Airlock Stomata Valves (LIFE_SUPPORT, EFFECTOR)
+    if (state.showSystemLifeSupport) {
     const airlockPos = nodeMap.get(NODE_IDS.CYBER_AIRLOCK)!.position;
     const airlockGeo = new THREE.TorusGeometry(0.3, 0.08, 8, 16);
     const airlockMesh = new THREE.Mesh(airlockGeo, mats.carapace);
@@ -1228,23 +1364,43 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       operatingPressure: nodeMap.get(NODE_IDS.CYBER_AIRLOCK)!.telemetry.operatingPressure,
     };
     shipGroup.add(airlockMirrorMesh);
+    } // end showSystemLifeSupport (stomata)
 
     // 5. Chitinous Bone Vertebrae (ARMOR_DEFENSE, STRUCTURAL) — series along spine
+    // Each vertebra is a torus (ring) with a central foramen (hole) that lets the
+    // spinal axon cord pass through and be protected. The torus is oriented
+    // perpendicular to the local spine direction so the cord threads through it.
+    if (state.showSystemSkeletal) {
     const chitinPos = nodeMap.get(NODE_IDS.CHITIN_VERTEBRA)!.position;
     const vertebraCount = Math.min(12, Math.max(6, Math.floor(state.length / 2)));
     for (let v = 0; v < vertebraCount; v++) {
       const vFrac = v / Math.max(1, vertebraCount - 1);
       const spineIdx = Math.floor(vFrac * (spineNodes.length - 1));
       const sn = spineNodes[spineIdx];
-      const vertGeo = new THREE.IcosahedronGeometry(0.28, 0);
+      // Torus: ring radius = 0.28 (outer), tube radius = 0.10 (thickness)
+      // The hole in the center (inner radius = 0.18) lets the 0.12m spinal cord pass through
+      const vertGeo = new THREE.TorusGeometry(0.28, 0.10, 8, 16);
       const vertMesh = new THREE.Mesh(vertGeo, mats.bone);
       // Vertebrae sit on the spine centerline — no fixed y offset, which would
       // poke through the hull at the tapered head/tail where radius is small.
       vertMesh.position.set(0, sn.y, sn.z);
+      // Orient the torus perpendicular to the local spine direction
+      // so the spinal cord threads through the hole
+      const nextIdx = Math.min(spineIdx + 1, spineNodes.length - 1);
+      const prevIdx = Math.max(spineIdx - 1, 0);
+      const spineDir = new THREE.Vector3(
+        0,
+        spineNodes[nextIdx].y - spineNodes[prevIdx].y,
+        spineNodes[nextIdx].z - spineNodes[prevIdx].z
+      ).normalize();
+      // Torus default normal is +Z; align it to the spine direction
+      const defaultNormal = new THREE.Vector3(0, 0, 1);
+      const quat = new THREE.Quaternion().setFromUnitVectors(defaultNormal, spineDir);
+      vertMesh.quaternion.copy(quat);
       vertMesh.userData = {
         name: `Chitinous Bone Vertebra #${v + 1}`,
         category: 'Armor & Defense',
-        desc: 'Calcified chitinous vertebra providing structural load-bearing along the spinal column.',
+        desc: 'Calcified chitinous vertebra with neural foramen (central hole) protecting the spinal axon cord.',
         pipeline: 'ARMOR_DEFENSE',
         role: 'STRUCTURAL',
         upstreamNodeName: 'Spinal Axon Cord Highway',
@@ -1253,8 +1409,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       };
       shipGroup.add(vertMesh);
     }
+    } // end showSystemSkeletal
 
     // 6. Bio-Nanite Coagulation Bed (ARMOR_DEFENSE, REPAIR)
+    if (state.showSystemArmorDefense) {
     const nanitePos = nodeMap.get(NODE_IDS.BIO_NANITE_BED)!.position;
     const naniteGeo = new THREE.SphereGeometry(0.6, 16, 8);
     const naniteMat = mats.sporeSac.clone();
@@ -1309,6 +1467,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       isShieldEmitter: true,
     };
     shipGroup.add(shieldMirrorMesh);
+    } // end showSystemArmorDefense
 
     // ── Pipeline Node Blend Bridges ──
     // Generate seamless SDF blend bridges for approved pipeline node connections:
@@ -1340,15 +1499,17 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         };
 
         // 1. Exoskeleton effectors → hull bridges
-        const exoNodes = [
-          NODE_IDS.SIPHON_VENT_NOZZLE,
-          NODE_IDS.SPIRACLE_VENT,
-          NODE_IDS.OCULAR_POD,
-          NODE_IDS.CYBER_AIRLOCK,
-          NODE_IDS.SHIELD_EMITTER,
-          NODE_IDS.CARAPACE_PLATE,
+        // Each bridge respects its parent organ's system toggle.
+        const exoNodes: { id: string; toggle: boolean }[] = [
+          { id: NODE_IDS.SIPHON_VENT_NOZZLE, toggle: state.showSystemPropulsion },
+          { id: NODE_IDS.SPIRACLE_VENT,      toggle: state.showSystemRespiratory },
+          { id: NODE_IDS.OCULAR_POD,        toggle: state.showSystemSurfaceOrgans },
+          { id: NODE_IDS.CYBER_AIRLOCK,     toggle: state.showSystemLifeSupport },
+          { id: NODE_IDS.SHIELD_EMITTER,    toggle: state.showSystemArmorDefense },
+          { id: NODE_IDS.CARAPACE_PLATE,    toggle: state.showSystemSkeletal },
         ];
-        for (const nodeId of exoNodes) {
+        for (const { id: nodeId, toggle } of exoNodes) {
+          if (!toggle) continue;
           const pos = nodePos(nodeId);
           if (pos) {
             bm.generateNodeHullBridge(`node_hull_${nodeId}`, nodeId, pos, nodeRadius(nodeId), mats.carapace);
@@ -1356,16 +1517,18 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         }
 
         // 2. Adjacent organ pairs sharing tissue
-        const organPairs: [string, string][] = [
-          [NODE_IDS.HEART_CORE, NODE_IDS.HEMOLYMPH_ATRIUM],
-          [NODE_IDS.BRAIN_CORE, NODE_IDS.NEURO_LINK],
-          [NODE_IDS.PLASMA_GLAND, NODE_IDS.PLASMA_BLADDER],
-          [NODE_IDS.CARAPACE_PLATE, NODE_IDS.BIO_NANITE_BED],
-          [NODE_IDS.BIO_NANITE_BED, NODE_IDS.SHIELD_EMITTER],
-          [NODE_IDS.CHITIN_VERTEBRA, NODE_IDS.CARAPACE_PLATE],
-          [NODE_IDS.HABITAT_CHAMBER, NODE_IDS.CYBER_AIRLOCK],
+        // Each pair respects both organs' system toggles — only bridge if both visible.
+        const organPairs: { a: string; b: string; toggle: boolean }[] = [
+          { a: NODE_IDS.HEART_CORE,        b: NODE_IDS.HEMOLYMPH_ATRIUM,  toggle: state.showSystemCirculatory },
+          { a: NODE_IDS.BRAIN_CORE,        b: NODE_IDS.NEURO_LINK,        toggle: state.showSystemNeural },
+          { a: NODE_IDS.PLASMA_GLAND,      b: NODE_IDS.PLASMA_BLADDER,    toggle: state.showSystemBioPlasma },
+          { a: NODE_IDS.CARAPACE_PLATE,    b: NODE_IDS.BIO_NANITE_BED,    toggle: state.showSystemArmorDefense && state.showSystemSkeletal },
+          { a: NODE_IDS.BIO_NANITE_BED,    b: NODE_IDS.SHIELD_EMITTER,    toggle: state.showSystemArmorDefense },
+          { a: NODE_IDS.CHITIN_VERTEBRA,   b: NODE_IDS.CARAPACE_PLATE,    toggle: state.showSystemSkeletal },
+          { a: NODE_IDS.HABITAT_CHAMBER,   b: NODE_IDS.CYBER_AIRLOCK,     toggle: state.showSystemLifeSupport },
         ];
-        for (const [idA, idB] of organPairs) {
+        for (const { a: idA, b: idB, toggle } of organPairs) {
+          if (!toggle) continue;
           const posA = nodePos(idA);
           const posB = nodePos(idB);
           if (posA && posB) {
@@ -1402,6 +1565,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       habitationVolume?: string;
       crewCapacity?: string;
       extra?: any;
+      /** Symmetry group ID — organs with the same group are symmetry partners */
+      symmetryGroupId?: string;
+      /** Side index within the symmetry group (0 = primary) */
+      symmetrySideIdx?: number;
     }
 
     const candidateOrgans: CandidateOrgan[] = [];
@@ -1409,7 +1576,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // A. Respiratory Spiracles
     // u = 0.32–0.62 (Thoracic section — max girth region where gill vents sit
     // on the broad hull surface for optimal gas exchange).
-    // Spiracles at v=0.25/0.75 (standard port/starboard) don't conflict with
+    // Spiracles at v=0.0/0.5 (standard port/starboard) don't conflict with
     // habitats at offset v positions (0.12/0.62/0.38/0.88).
     const spiracleCount = state.spiracleCount;
     for (let s = 0; s < spiracleCount; s++) {
@@ -1425,6 +1592,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Respiratory System',
           desc: 'Contractile vent exhaling bio-plasma gases with active protective clearance field.',
           type: 'spiracle',
+          symmetryGroupId: `spiracle_${s}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           // 0.85 (was 0.70): the leviathan hull is slimmer than the old grub
@@ -1462,6 +1631,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Exoskeleton Frame',
           desc: 'Hardened calcified frame providing lateral defense spikes.',
           type: 'rib',
+          symmetryGroupId: `rib_${i}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           clearanceRadius: 4.50,
@@ -1494,6 +1665,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Sensory Symbiont',
           desc: 'Symbiotic eye cluster emitting focused thermal bio-lasers.',
           type: 'eye',
+          symmetryGroupId: `eye_${i}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           clearanceRadius: 1.50,
@@ -1517,27 +1690,31 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     for (let i = 0; i < state.sporeSacs; i++) {
       const initialU = 0.67 + (i / Math.max(1, state.sporeSacs)) * 0.15;
       const sym = getSymmetryVCoords(state.symmetryType, i);
-      const initialV = sym.vCoords[i % sym.vCoords.length];
-      const surf = sampleOrganicSurface(initialU, initialV);
-      candidateOrgans.push({
-        id: `spore_${i}`,
-        name: `Viral Spore Warhead Pod #${i + 1}`,
-        category: 'Symbiont Bio-Weapon',
-        desc: 'Bulbous organ filled with explosive caustic spore fluid.',
-        type: 'spore',
-        u: initialU,
-        v: initialV,
-        clearanceRadius: 2.80,
-        pos: surf.position.clone(),
-        normal: surf.normal.clone(),
-        requiredFluid: 'Corrosive Bio-Acid Solution',
-        demandMlMin: 26.0,
-        metabolicRate: '26.0 mL/min Acid Synthesis',
-        neuralFreq: '45 Hz Bio-Trigger Impulse',
-        enzymaticPressure: '18.5 pH Caustic Acid',
-        isInterceptable: true,
-        minFreeSpace: '1.2m Clearance Zone',
-        extra: { sacRadius: 0.42 + rng() * 0.22, wobblePhase: rng() * Math.PI * 2 },
+      sym.vCoords.forEach((initialV, sideIdx) => {
+        const sideName = sym.names[sideIdx] || `Pod #${sideIdx + 1}`;
+        const surf = sampleOrganicSurface(initialU, initialV);
+        candidateOrgans.push({
+          id: `spore_${i}_${sideIdx}`,
+          name: `Viral Spore Warhead Pod #${i + 1} (${sideName})`,
+          category: 'Symbiont Bio-Weapon',
+          desc: 'Bulbous organ filled with explosive caustic spore fluid.',
+          type: 'spore',
+          u: initialU,
+          v: initialV,
+          symmetryGroupId: `spore_${i}`,
+          symmetrySideIdx: sideIdx,
+          clearanceRadius: 2.80,
+          pos: surf.position.clone(),
+          normal: surf.normal.clone(),
+          requiredFluid: 'Corrosive Bio-Acid Solution',
+          demandMlMin: 26.0,
+          metabolicRate: '26.0 mL/min Acid Synthesis',
+          neuralFreq: '45 Hz Bio-Trigger Impulse',
+          enzymaticPressure: '18.5 pH Caustic Acid',
+          isInterceptable: true,
+          minFreeSpace: '1.2m Clearance Zone',
+          extra: { sacRadius: 0.42 + rng() * 0.22, wobblePhase: rng() * Math.PI * 2 },
+        });
       });
     }
 
@@ -1557,6 +1734,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Appendage Kinematics',
           desc: 'Fluidic appendage with FABRIK IK joint kinematics for smooth organic grasping.',
           type: 'tentacle',
+          symmetryGroupId: `tentacle_${i}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           clearanceRadius: 4.50,
@@ -1575,32 +1754,164 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     }
 
     // F. Neural Ganglia Nodes
-    // u = 0.03–0.28 (Cranial + Neck — ganglion clusters cluster around the
-    // brain in the head and upper neck, routing sensory and motor signals).
-    for (let i = 0; i < state.neuralNodes; i++) {
-      const initialU = 0.03 + rng() * 0.25;
-      const initialV = rng();
-      const surf = sampleOrganicSurface(initialU, initialV);
-      candidateOrgans.push({
-        id: `neural_${i}`,
-        name: `Neural Ganglion Cluster #${i + 1}`,
-        category: 'Nervous Subsystem',
-        desc: 'Pulsing biological processing core routing nervous impulses.',
-        type: 'neural',
-        u: initialU,
-        v: initialV,
-        clearanceRadius: 2.80,
-        pos: surf.position.clone(),
-        normal: surf.normal.clone(),
-        requiredFluid: 'Neuro-Transmitter Bio-Plasma',
-        demandMlMin: 35.0,
-        metabolicRate: '35.0 mL/min Synaptic Perfusion',
-        neuralFreq: `${(80 + rng() * 40).toFixed(1)} Hz Impulse`,
-        enzymaticPressure: '8.8 bar Bio-Electric Potential',
-        isInterceptable: false,
-        minFreeSpace: '0.8m Clearance Zone',
-        extra: { size: 0.28 + rng() * 0.45, pulsePhase: rng() * Math.PI * 2 },
+    // Ganglia are distributed across the FULL spine (all 5 anatomical sections)
+    // per the Neural Compute Architecture spec, not clustered in the head.
+    // Distribution percentages (spec §4.2):
+    //   Cranial ~20%, Neck ~15%, Thoracic ~35%, Caudal ~20%, Tail ~10%
+    // Ganglion size varies by section (cranial largest, tail smallest).
+    // V placement uses a golden-ratio deterministic sequence instead of rng()
+    // to prevent ganglia from clustering at the same position (grub fix #3).
+    // For bilateral symmetry, ganglia are placed as mirrored pairs using
+    // getSymmetryVCoords while keeping the golden-ratio U spread.
+    // The golden-ratio offset is applied to the PRIMARY V only; the partner
+    // gets the symmetry-correct mirrored V via symmetryCorrectV.
+    const neuralGoldenRatio = 0.618033988749895;
+    // Section distribution: [fraction, uMin, uMax, sizeMultiplier, label]
+    const ganglionSections: { frac: number; uMin: number; uMax: number; sizeMul: number; label: string }[] = [
+      { frac: 0.20, uMin: 0.02, uMax: 0.15, sizeMul: 1.40, label: 'Cranial' },   // largest
+      { frac: 0.15, uMin: 0.15, uMax: 0.30, sizeMul: 1.10, label: 'Neck' },
+      { frac: 0.35, uMin: 0.30, uMax: 0.65, sizeMul: 1.20, label: 'Thoracic' },  // large
+      { frac: 0.20, uMin: 0.65, uMax: 0.85, sizeMul: 0.90, label: 'Caudal' },    // medium
+      { frac: 0.10, uMin: 0.85, uMax: 0.98, sizeMul: 0.65, label: 'Tail' },      // smallest
+    ];
+    // Assign ganglion indices to sections based on fractional distribution
+    let ganglionIdx = 0;
+    for (const section of ganglionSections) {
+      const sectionCount = Math.round(state.neuralNodes * section.frac);
+      for (let s = 0; s < sectionCount && ganglionIdx < state.neuralNodes; s++) {
+        const i = ganglionIdx;
+        const initialU = section.uMin + rng() * (section.uMax - section.uMin);
+        const sym = getSymmetryVCoords(state.symmetryType, i);
+        // Golden-ratio offset to spread ganglia within the starboard quadrant
+        const goldenOffset = ((i + 1) * neuralGoldenRatio) % 0.20; // keep within starboard quadrant
+        sym.vCoords.forEach((baseV, sideIdx) => {
+          // Primary (sideIdx 0): apply golden offset to spread
+          // Partner (sideIdx > 0): use symmetryCorrectV to guarantee mirror
+          const initialV = sideIdx === 0
+            ? (baseV + goldenOffset) % 1.0
+            : symmetryCorrectV(state.symmetryType, (sym.vCoords[0] + goldenOffset) % 1.0, sideIdx);
+          const sideName = sym.names[sideIdx] || `Branch #${sideIdx + 1}`;
+          const surf = sampleOrganicSurface(initialU, initialV);
+          // Ganglion size varies by section (cranial largest, tail smallest)
+          const baseSize = 0.28 + rng() * 0.20;
+          const sectionSize = baseSize * section.sizeMul;
+          candidateOrgans.push({
+            id: `neural_${i}_${sideIdx}`,
+            name: `Neural Ganglion Cluster #${i + 1} (${sideName}) [${section.label}]`,
+            category: 'Nervous Subsystem',
+            desc: 'Pulsing biological processing core routing nervous impulses.',
+            type: 'neural',
+            u: initialU,
+            v: initialV,
+            symmetryGroupId: `neural_${i}`,
+            symmetrySideIdx: sideIdx,
+            clearanceRadius: 2.80,
+            pos: surf.position.clone(),
+            normal: surf.normal.clone(),
+            requiredFluid: 'Neuro-Transmitter Bio-Plasma',
+            demandMlMin: 35.0,
+            metabolicRate: '35.0 mL/min Synaptic Perfusion',
+            neuralFreq: `${(80 + rng() * 40).toFixed(1)} Hz Impulse`,
+            enzymaticPressure: '8.8 bar Bio-Electric Potential',
+            isInterceptable: false,
+            minFreeSpace: '0.8m Clearance Zone',
+            extra: { size: sectionSize, pulsePhase: rng() * Math.PI * 2, section: section.label, isVentral: false },
+          });
+        });
+        ganglionIdx++;
+      }
+    }
+    // Fill any remaining ganglia (rounding remainder) in the thoracic section
+    while (ganglionIdx < state.neuralNodes) {
+      const i = ganglionIdx;
+      const initialU = 0.30 + rng() * 0.35;
+      const sym = getSymmetryVCoords(state.symmetryType, i);
+      const goldenOffset = ((i + 1) * neuralGoldenRatio) % 0.20;
+      sym.vCoords.forEach((baseV, sideIdx) => {
+        const initialV = sideIdx === 0
+          ? (baseV + goldenOffset) % 1.0
+          : symmetryCorrectV(state.symmetryType, (sym.vCoords[0] + goldenOffset) % 1.0, sideIdx);
+        const sideName = sym.names[sideIdx] || `Branch #${sideIdx + 1}`;
+        const surf = sampleOrganicSurface(initialU, initialV);
+        const baseSize = 0.28 + rng() * 0.20;
+        candidateOrgans.push({
+          id: `neural_${i}_${sideIdx}`,
+          name: `Neural Ganglion Cluster #${i + 1} (${sideName}) [Thoracic]`,
+          category: 'Nervous Subsystem',
+          desc: 'Pulsing biological processing core routing nervous impulses.',
+          type: 'neural',
+          u: initialU,
+          v: initialV,
+          symmetryGroupId: `neural_${i}`,
+          symmetrySideIdx: sideIdx,
+          clearanceRadius: 2.80,
+          pos: surf.position.clone(),
+          normal: surf.normal.clone(),
+          requiredFluid: 'Neuro-Transmitter Bio-Plasma',
+          demandMlMin: 35.0,
+          metabolicRate: '35.0 mL/min Synaptic Perfusion',
+          neuralFreq: `${(80 + rng() * 40).toFixed(1)} Hz Impulse`,
+          enzymaticPressure: '8.8 bar Bio-Electric Potential',
+          isInterceptable: false,
+          minFreeSpace: '0.8m Clearance Zone',
+          extra: { size: baseSize * 1.20, pulsePhase: rng() * Math.PI * 2, section: 'Thoracic', isVentral: false },
+        });
       });
+      ganglionIdx++;
+    }
+
+    // F2. Ventral Nerve Chain Ganglia (optional, separate toggle)
+    // Per the Neural Compute Architecture spec §4.1, the ventral chain is a
+    // second nerve cord along the ventral midline (v=0.75) with its own wire
+    // cost. Only relevant for bilateral symmetry (insect model).
+    // Guarded by showSystemNeuralVentral — when off, no ventral ganglia are placed.
+    if (state.showSystemNeuralVentral) {
+      const ventralGanglionCount = Math.max(2, Math.round(state.neuralNodes * 0.5));
+      let ventralIdx = 0;
+      for (const section of ganglionSections) {
+        const sectionCount = Math.round(ventralGanglionCount * section.frac);
+        for (let s = 0; s < sectionCount && ventralIdx < ventralGanglionCount; s++) {
+          const i = ventralIdx;
+          const initialU = section.uMin + rng() * (section.uMax - section.uMin);
+          const sym = getSymmetryVCoords(state.symmetryType, i);
+          const goldenOffset = ((i + 1) * neuralGoldenRatio) % 0.10;
+          sym.vCoords.forEach((baseV, sideIdx) => {
+            // Ventral chain: v=0.75 (ventral midline) instead of v=0.25 (dorsal)
+            // Apply golden offset around the ventral position
+            const ventralBase = 0.75;
+            const initialV = sideIdx === 0
+              ? (ventralBase + goldenOffset) % 1.0
+              : symmetryCorrectV(state.symmetryType, (ventralBase + goldenOffset) % 1.0, sideIdx);
+            const sideName = sym.names[sideIdx] || `Branch #${sideIdx + 1}`;
+            const surf = sampleOrganicSurface(initialU, initialV);
+            const baseSize = 0.22 + rng() * 0.16;
+            const sectionSize = baseSize * section.sizeMul * 0.8; // ventral ganglia slightly smaller
+            candidateOrgans.push({
+              id: `neural_ventral_${i}_${sideIdx}`,
+              name: `Ventral Ganglion Cluster #${i + 1} (${sideName}) [${section.label}]`,
+              category: 'Nervous Subsystem',
+              desc: 'Ventral nerve chain ganglion routing autonomic and motor signals along the ventral cord.',
+              type: 'neural',
+              u: initialU,
+              v: initialV,
+              symmetryGroupId: `neural_ventral_${i}`,
+              symmetrySideIdx: sideIdx,
+              clearanceRadius: 2.40,
+              pos: surf.position.clone(),
+              normal: symmetrizeMidlineNormal(initialV, surf.normal),
+              requiredFluid: 'Neuro-Transmitter Bio-Plasma',
+              demandMlMin: 28.0,
+              metabolicRate: '28.0 mL/min Synaptic Perfusion',
+              neuralFreq: `${(70 + rng() * 30).toFixed(1)} Hz Impulse`,
+              enzymaticPressure: '7.2 bar Bio-Electric Potential',
+              isInterceptable: false,
+              minFreeSpace: '0.6m Clearance Zone',
+              extra: { size: sectionSize, pulsePhase: rng() * Math.PI * 2, section: section.label, isVentral: true },
+            });
+          });
+          ventralIdx++;
+        }
+      }
     }
 
     // G. Human Habitat Rooms
@@ -1609,13 +1920,15 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // and rib cage protection).
     //
     // CRITICAL: Habitats use OFFSET v positions (0.12, 0.62, 0.38, 0.88)
-    // instead of the standard port/starboard (0.25/0.75) used by other organs.
+    // instead of the standard port/starboard (0.0/0.5) used by other organs.
     // This prevents the solver from chain-reacting: when a spiracle at v=0.25
     // pushes a habitat away, the habitat doesn't get pushed into another organ
     // at v=0.75 because the habitat is at v=0.12, not v=0.25.
     // The offset also separates same-side habitats by ~25% of circumference.
+    // V offsets are bilateral X-mirror pairs: V_mirror = (0.5 - V + 1) % 1
+    // (e.g. 0.10 starboard ↔ 0.40 port, both at same Y=+0.59r).
     const habitatCount = state.habitatChambers || 0;
-    const habitatVOffsets = [0.12, 0.62, 0.38, 0.88, 0.20, 0.70, 0.45, 0.95];
+    const habitatVOffsets = [0.10, 0.40, 0.15, 0.35, 0.20, 0.30, 0.05, 0.45];
     for (let h = 0; h < habitatCount; h++) {
       const initialU = 0.32 + (h / Math.max(1, habitatCount)) * 0.28;
       const sym = getSymmetryVCoords(state.symmetryType, h);
@@ -1631,6 +1944,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'habitat',
         u: initialU,
         v: initialV,
+        // Habitats use X-mirrored V offset pairs: (0.10,0.40), (0.15,0.35), etc.
+        // Pair index = floor(h/2), side = h%2 (0=starboard, 1=port)
+        symmetryGroupId: `habitat_pair_${Math.floor(h / 2)}`,
+        symmetrySideIdx: h % 2,
         // 2.25 (was 1.85): habitat rooms are 1.5m boxes whose corners extend
         // ~1.1m from center; on the slimmer leviathan hull they need a larger
         // repulsion field to avoid clipping spiracles/eyes/spore pods.
@@ -1653,7 +1970,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // H. Pectoral Fins — Manta-ray-style hydrodynamic wings on the thoracic
     // flanks for atmospheric gliding and dust-cloud navigation. These follow
     // natural organic airfoil shapes (thick leading edge, thin trailing edge).
-    // Placed at port/starboard (v=0.25/0.75) in the Thoracic section.
+    // Placed at port/starboard (v=0.0/0.5) in the Thoracic section.
     const pectoralFinCount = state.pectoralFins || 0;
     for (let f = 0; f < pectoralFinCount; f++) {
       const initialU = 0.35 + (f / Math.max(1, pectoralFinCount)) * 0.25;
@@ -1667,6 +1984,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Supporting Appendage',
           desc: 'Manta-ray-style organic airfoil wing for atmospheric gliding, ocean navigation, and dense dust-cloud traversal. Thick cambered leading edge tapers to a thin flexible trailing edge.',
           type: 'pectoralFin',
+          symmetryGroupId: `pectoralFin_${f}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           clearanceRadius: 4.50,
@@ -1705,6 +2024,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           category: 'Supporting Appendage',
           desc: 'Cetacean-style horizontal tail fluke for aquatic thrust generation and atmospheric pitch control. Symmetric hydrofoil profile with tapered tips.',
           type: 'caudalFluke',
+          symmetryGroupId: `caudalFluke_${fl}`,
+          symmetrySideIdx: sideIdx,
           u: initialU,
           v: initialV,
           clearanceRadius: 3.50,
@@ -1728,10 +2049,12 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     }
 
     // J. Landing Limbs — Cephalopod-arm-style articulated ventral legs for
-    // planetary landing and surface anchoring. Ventral placement (v≈0.5)
+    // planetary landing and surface anchoring. Ventral placement (v≈0.75)
     // with multi-joint articulation following octopus/squid arm morphology.
+    // V offsets are bilateral X-mirror pairs on the ventral side:
+    // V=0.80 (ventral-starboard) ↔ V=0.70 (ventral-port), both at Y≈-0.95r.
     const landingLimbCount = state.landingLimbs || 0;
-    const landingVOffsets = [0.48, 0.52, 0.45, 0.55, 0.42, 0.58];
+    const landingVOffsets = [0.80, 0.70, 0.85, 0.65, 0.78, 0.72];
     for (let l = 0; l < landingLimbCount; l++) {
       const initialU = 0.38 + (l / Math.max(1, landingLimbCount)) * 0.22;
       const initialV = landingVOffsets[l % landingVOffsets.length];
@@ -1744,6 +2067,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         type: 'landingLimb',
         u: initialU,
         v: initialV,
+        // Landing limbs use X-mirrored V offset pairs: (0.80,0.70), (0.85,0.65), etc.
+        symmetryGroupId: `landingLimb_pair_${Math.floor(l / 2)}`,
+        symmetrySideIdx: l % 2,
         clearanceRadius: 4.00,
         pos: surf.position.clone(),
         normal: surf.normal.clone(),
@@ -1764,11 +2090,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
 
     // K. Dorsal Sail — Sailfish/Mola-style dorsal stabilizer fin on the spine
     // for stability in atmospheric flight and dust-cloud navigation. Placed
-    // at v=0.0 (dorsal ridge) spanning the Neck-Thoracic transition.
+    // at v=0.25 (dorsal ridge, Y=+r) spanning the Neck-Thoracic transition.
     const dorsalSailCount = state.dorsalSail || 0;
     for (let d = 0; d < dorsalSailCount; d++) {
       const initialU = 0.20 + (d / Math.max(1, dorsalSailCount)) * 0.30;
-      const initialV = 0.0; // dorsal ridge
+      const initialV = 0.25; // dorsal ridge (Y=+r, X=0)
       const surf = sampleOrganicSurface(initialU, initialV);
       candidateOrgans.push({
         id: `dorsal_sail_${d}`,
@@ -1780,7 +2106,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         v: initialV,
         clearanceRadius: 2.80,
         pos: surf.position.clone(),
-        normal: surf.normal.clone(),
+        normal: symmetrizeMidlineNormal(initialV, surf.normal),
         requiredFluid: 'Cartilage Calcite Fluid',
         demandMlMin: 12.0,
         metabolicRate: '12.0 mL/min Sail Perfusion',
@@ -1846,18 +2172,54 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       });
     }
 
+    // ── Pre-solver initial overlap scan ──
+    // Diagnostic: count how many organs are initially overlapping before the
+    // solver runs. This identifies which organ types need better initial placement.
+    {
+      let initialOverlaps = 0;
+      const overlapsByType: Record<string, number> = {};
+      for (let i = 0; i < candidateOrgans.length; i++) {
+        for (let j = i + 1; j < candidateOrgans.length; j++) {
+          const dist = candidateOrgans[i].pos.distanceTo(candidateOrgans[j].pos);
+          const req = candidateOrgans[i].clearanceRadius + candidateOrgans[j].clearanceRadius;
+          if (dist < req * 0.7) {
+            initialOverlaps++;
+            const key = `${candidateOrgans[i].type}↔${candidateOrgans[j].type}`;
+            overlapsByType[key] = (overlapsByType[key] || 0) + 1;
+          }
+        }
+      }
+      if (initialOverlaps > 0) {
+        const topOverlaps = Object.entries(overlapsByType)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ');
+        console.log(`[Pre-Solver Scan] ${initialOverlaps} initial overlaps among ${candidateOrgans.length} organs. Top: ${topOverlaps}`);
+      }
+    }
+
     // EXECUTE ITERATIVE SURFACE FORCE-FIELD REPULSION SOLVER WITH SPATIAL PARTITIONING
     // Ensures organs actively push neighboring organs away using a Grid-Based Spatial Partitioning
     // algorithm and AABB (Axis-Aligned Bounding Box) intersection detection.
-    const SOLVER_PASSES = 60;
-    const GRID_SIZE = 4.0;
+    // Solver tuned for doubled clearance radii: larger repulsion fields converge
+    // faster per pass, so fewer passes needed. Grid size balances cell granularity
+    // against candidate count (radiusCells = ceil(clearanceRadius / GRID_SIZE)).
+    const SOLVER_PASSES = 45;
+    // Adaptive grid size: 2× the smallest clearance radius, clamped to [1.5, 4.0].
+    // The old fixed GRID_SIZE=3.0 was too coarse for small organs (eyes: 1.50m)
+    // and could miss nearby organs in adjacent cells.
+    const minClearance = candidateOrgans.reduce(
+      (min, o) => Math.min(min, o.clearanceRadius), Infinity
+    );
+    const GRID_SIZE = Math.max(1.5, Math.min(4.0, minClearance * 2.0));
 
     // Anatomical section u-bounds for each organ type — used by the solver
     // and post-solver fixups to clamp organs within their correct section.
     const getUBounds = (type: string): [number, number] => {
       switch (type) {
         case 'eye':    return [0.02, 0.15]; // Cranial
-        case 'neural': return [0.03, 0.30]; // Cranial + Neck
+        case 'neural': return [0.02, 0.98]; // Full spine (was [0.03, 0.30])
         case 'spiracle':
         case 'rib':
         case 'habitat':
@@ -1871,19 +2233,86 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       }
     };
 
+    // ── Build symmetry group maps for hierarchical pair-constrained solver ──
+    // Hierarchical approach: only primary organs (sideIdx 0) are moved by the
+    // solver. Partners (sideIdx > 0) are locked followers that automatically
+    // get the mirrored V when their primary moves. This guarantees symmetry
+    // by construction — the solver never independently moves a partner.
+    const symmetryPartnerMap = new Map<number, number>(); // primaryIdx → partnerIdx
+    const isLockedPartner = new Set<number>(); // indices that are NOT primaries
+    if (state.symmetryType !== 'asymmetrical') {
+      const groupMap = new Map<string, number[]>();
+      candidateOrgans.forEach((org, idx) => {
+        if (!org.symmetryGroupId) return;
+        if (!groupMap.has(org.symmetryGroupId)) groupMap.set(org.symmetryGroupId, []);
+        groupMap.get(org.symmetryGroupId)!.push(idx);
+      });
+      for (const [, indices] of groupMap) {
+        // Find primary (sideIdx 0, or first)
+        const primaryIdx = indices.find(idx => candidateOrgans[idx].symmetrySideIdx === 0) ?? indices[0];
+        for (const idx of indices) {
+          if (idx !== primaryIdx) {
+            isLockedPartner.add(idx);
+            symmetryPartnerMap.set(primaryIdx, idx);
+          }
+        }
+      }
+    }
+
+    // Diagnostic: count grouped vs ungrouped organs
+    {
+      const grouped = candidateOrgans.filter(o => o.symmetryGroupId).length;
+      const ungrouped = candidateOrgans.length - grouped;
+      const locked = candidateOrgans.filter((_, idx) => isLockedPartner.has(idx)).length;
+      const ungroupedTypes = candidateOrgans.filter(o => !o.symmetryGroupId).map(o => o.type);
+      console.log(`[Symmetry Groups] ${grouped} grouped, ${ungrouped} ungrouped, ${locked} locked, ${symmetryPartnerMap.size} pairs. Ungrouped types: ${ungroupedTypes.join(', ')}`);
+    }
+
+    // Helper: update a primary organ's U from a 3D push, then sync its partner.
+    // V is PRESERVED from the original placement — only U (Z position) is
+    // adjusted by the solver. This prevents the solver from drifting organs
+    // toward the dorsal/ventral midline (V=0.25/0.75) which would break
+    // bilateral symmetry. V-based separation is handled by the initial
+    // placement offsets, not by the solver.
+    const updatePrimaryAndPartner = (org: CandidateOrgan, shift: THREE.Vector3, organIdx: number) => {
+      const pushed = org.pos.clone().add(shift);
+      const [uMin, uMax] = getUBounds(org.type);
+      let newU = (pushed.z - startZ) / length;
+      newU = Math.max(uMin, Math.min(uMax, newU));
+
+      // Keep original V — only U changes. This guarantees the organ stays
+      // on its correct side (starboard/port) and the partner mirrors it.
+      org.u = newU;
+      // org.v stays unchanged
+      const surf = sampleOrganicSurface(org.u, org.v);
+      org.pos.copy(surf.position);
+      org.normal.copy(symmetrizeMidlineNormal(org.v, surf.normal));
+
+      // Sync locked partner: same U, symmetry-correct V (already set at spawn)
+      const partnerIdx = symmetryPartnerMap.get(organIdx);
+      if (partnerIdx !== undefined && partnerIdx !== organIdx) {
+        const partner = candidateOrgans[partnerIdx];
+        partner.u = newU;
+        // partner.v stays unchanged (already symmetry-correct from spawn)
+        const psurf = sampleOrganicSurface(partner.u, partner.v);
+        partner.pos.copy(psurf.position);
+        partner.normal.copy(symmetrizeMidlineNormal(partner.v, psurf.normal));
+      }
+    };
+
     for (let pass = 0; pass < SOLVER_PASSES; pass++) {
-      // 1. Build Spatial Hash Grid
+      // 1. Build Spatial Hash Grid (all organs participate in collision detection)
       const grid = new Map<string, number[]>();
-      
+
       for (let i = 0; i < candidateOrgans.length; i++) {
         const org = candidateOrgans[i];
         const cellX = Math.floor(org.pos.x / GRID_SIZE);
         const cellY = Math.floor(org.pos.y / GRID_SIZE);
         const cellZ = Math.floor(org.pos.z / GRID_SIZE);
-        
+
         // Add organ to overlapping cells based on clearance radius
         const radiusCells = Math.ceil(org.clearanceRadius / GRID_SIZE);
-        
+
         for (let dx = -radiusCells; dx <= radiusCells; dx++) {
           for (let dy = -radiusCells; dy <= radiusCells; dy++) {
             for (let dz = -radiusCells; dz <= radiusCells; dz++) {
@@ -1896,18 +2325,23 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       }
 
       // 2. Resolve Collisions using Spatial Grid and AABB
+      // Only primary organs (non-locked) are moved. Locked partners follow.
+      // Collisions between symmetry partners are skipped (they're mirrors).
       const resolvedPairs = new Set<string>();
-      
+
       grid.forEach((organsInCell) => {
         for (let idxA = 0; idxA < organsInCell.length; idxA++) {
           for (let idxB = idxA + 1; idxB < organsInCell.length; idxB++) {
             const i = organsInCell[idxA];
             const j = organsInCell[idxB];
-            
+
             // Only resolve each pair once per pass
             const pairId = i < j ? `${i}-${j}` : `${j}-${i}`;
             if (resolvedPairs.has(pairId)) continue;
             resolvedPairs.add(pairId);
+
+            // Skip collision between symmetry partners (they're mirrors, not collisions)
+            if (symmetryPartnerMap.get(i) === j || symmetryPartnerMap.get(j) === i) continue;
 
             const orgA = candidateOrgans[i];
             const orgB = candidateOrgans[j];
@@ -1925,10 +2359,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             if (boxA.intersectsBox(boxB)) {
               const reqSpace = orgA.clearanceRadius + orgB.clearanceRadius;
               const currentDist = orgA.pos.distanceTo(orgB.pos);
-              
+
               if (currentDist < reqSpace) {
                 const overlap = reqSpace - currentDist;
-                
+
                 // Push overlapping components to the nearest free coordinate
                 let pushDir = new THREE.Vector3().subVectors(orgA.pos, orgB.pos);
                 if (pushDir.lengthSq() < 0.0001) {
@@ -1940,31 +2374,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
                 const shiftA = pushDir.clone().multiplyScalar(shiftVal);
                 const shiftB = pushDir.clone().multiplyScalar(-shiftVal);
 
-                // Re-derive u/v from the pushed position in 3D space
-                const startZ = spineNodes[0].z;
-                
-                const updateOrganUV = (org: any, shift: THREE.Vector3) => {
-                  const pushed = org.pos.clone().add(shift);
-                  const [uMin, uMax] = getUBounds(org.type);
-                  let newU = (pushed.z - startZ) / length;
-                  newU = Math.max(uMin, Math.min(uMax, newU));
-                  
-                  const spineIdx = Math.round(newU * (spineNodes.length - 1));
-                  const spineNode = spineNodes[Math.min(spineNodes.length - 1, Math.max(0, spineIdx))];
-                  const dx = pushed.x - spineNode.xArch;
-                  const dy = pushed.y - spineNode.y;
-                  let newV = Math.atan2(dx, dy) / (Math.PI * 2);
-                  if (newV < 0) newV += 1.0;
-                  
-                  org.u = newU;
-                  org.v = newV;
-                  const surf = sampleOrganicSurface(org.u, org.v);
-                  org.pos.copy(surf.position);
-                  org.normal.copy(surf.normal);
-                };
-
-                updateOrganUV(orgA, shiftA);
-                updateOrganUV(orgB, shiftB);
+                // Only move primaries; locked partners follow their primary
+                if (!isLockedPartner.has(i)) {
+                  updatePrimaryAndPartner(orgA, shiftA, i);
+                }
+                if (!isLockedPartner.has(j)) {
+                  updatePrimaryAndPartner(orgB, shiftB, j);
+                }
               }
             }
           }
@@ -1975,7 +2391,12 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // fixed interior masses (heart, glands, disruptors, brain). Only the
       // surface organ moves; the interior organ is anatomically pinned. The
       // organ's own mesh extent is approximated as 0.6× its clearance field.
-      for (const org of candidateOrgans) {
+      // Pair-aware: when a surface organ is pushed, its symmetry partner is
+      // re-projected to the mirrored V to preserve bilateral symmetry.
+      for (let orgIdx = 0; orgIdx < candidateOrgans.length; orgIdx++) {
+        // Skip locked partners — they follow their primary
+        if (isLockedPartner.has(orgIdx)) continue;
+        const org = candidateOrgans[orgIdx];
         for (const rep of staticRepulsors) {
           const reqSpace = org.clearanceRadius * 0.6 + rep.radius;
           const dist = org.pos.distanceTo(rep.pos);
@@ -1986,25 +2407,26 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           pushDir.normalize();
           const pushed = org.pos.clone().addScaledVector(pushDir, (reqSpace - dist) * 0.6);
 
-          // Re-derive u/v from the pushed position (same math as the gizmo
-          // drag handler), then re-project onto the exact hull surface.
-          // Clamp to the organ's anatomical section so repulsors can't push
-          // organs out of their correct region.
+          // Only adjust U (Z position) — preserve V to maintain symmetry.
           let newU = (pushed.z - startZ) / length;
           const [orgUMin, orgUMax] = getUBounds(org.type);
           newU = Math.max(orgUMin, Math.min(orgUMax, newU));
-          const spineIdx = Math.round(newU * (spineNodes.length - 1));
-          const spineNode = spineNodes[Math.min(spineNodes.length - 1, Math.max(0, spineIdx))];
-          const dx = pushed.x - spineNode.xArch;
-          const dy = pushed.y - spineNode.y;
-          let newV = Math.atan2(dx, dy) / (Math.PI * 2);
-          if (newV < 0) newV += 1.0;
 
           org.u = newU;
-          org.v = newV;
+          // org.v stays unchanged
           const surf = sampleOrganicSurface(org.u, org.v);
           org.pos.copy(surf.position);
-          org.normal.copy(surf.normal);
+          org.normal.copy(symmetrizeMidlineNormal(org.v, surf.normal));
+
+          // Sync locked partner: same U, V already correct from spawn
+          const partnerIdx = symmetryPartnerMap.get(orgIdx);
+          if (partnerIdx !== undefined && partnerIdx !== orgIdx) {
+            const partner = candidateOrgans[partnerIdx];
+            partner.u = newU;
+            const psurf = sampleOrganicSurface(partner.u, partner.v);
+            partner.pos.copy(psurf.position);
+            partner.normal.copy(symmetrizeMidlineNormal(partner.v, psurf.normal));
+          }
         }
       }
     }
@@ -2015,20 +2437,23 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     // by reassigning v positions for any habitat pair that's still too close.
     // Habitats get unique v positions from a spread distribution, and any
     // habitat overlapping another is moved to the next available v slot.
+    // Pair-aware: when a habitat moves, its symmetry partner follows.
     {
       const habitats = candidateOrgans.filter(o => o.type === 'habitat');
       if (habitats.length > 1) {
         // Spread habitats evenly around the circumference, offset from the
-        // standard port/starboard positions (0.25/0.75) used by other organs.
-        const vSpread = [0.12, 0.62, 0.38, 0.88, 0.20, 0.70, 0.45, 0.05];
+        // standard port/starboard positions (0.0/0.5) used by other organs.
+        // V offsets are bilateral X-mirror pairs: V_mirror = (0.5 - V + 1) % 1
+        const vSpread = [0.10, 0.40, 0.15, 0.35, 0.20, 0.30, 0.05, 0.45];
         for (let i = 0; i < habitats.length; i++) {
           habitats[i].v = vSpread[i % vSpread.length];
           const surf = sampleOrganicSurface(habitats[i].u, habitats[i].v);
           habitats[i].pos.copy(surf.position);
-          habitats[i].normal.copy(surf.normal);
+          habitats[i].normal.copy(symmetrizeMidlineNormal(habitats[i].v, surf.normal));
         }
         // Second pass: check for remaining habitat-habitat overlaps and
         // shift u apart if v separation alone wasn't enough.
+        // Pair-aware: only move primaries, partners follow.
         for (let pass = 0; pass < 10; pass++) {
           let moved = false;
           for (let i = 0; i < habitats.length; i++) {
@@ -2036,6 +2461,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
               const dist = habitats[i].pos.distanceTo(habitats[j].pos);
               const reqSpace = habitats[i].clearanceRadius + habitats[j].clearanceRadius;
               if (dist >= reqSpace * 0.7) continue;
+              // Skip symmetry partners
+              if (habitats[i].symmetryGroupId && habitats[i].symmetryGroupId === habitats[j].symmetryGroupId) continue;
               // Push apart in u — strong shift to overcome solver convergence.
               // Clamped to Thoracic section (0.32–0.62).
               const zDir = habitats[i].pos.z >= habitats[j].pos.z ? 1 : -1;
@@ -2043,10 +2470,10 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
               habitats[j].u = Math.max(0.32, Math.min(0.62, habitats[j].u - 0.08 * zDir));
               const surfA = sampleOrganicSurface(habitats[i].u, habitats[i].v);
               habitats[i].pos.copy(surfA.position);
-              habitats[i].normal.copy(surfA.normal);
+              habitats[i].normal.copy(symmetrizeMidlineNormal(habitats[i].v, surfA.normal));
               const surfB = sampleOrganicSurface(habitats[j].u, habitats[j].v);
               habitats[j].pos.copy(surfB.position);
-              habitats[j].normal.copy(surfB.normal);
+              habitats[j].normal.copy(symmetrizeMidlineNormal(habitats[j].v, surfB.normal));
               moved = true;
             }
           }
@@ -2057,10 +2484,14 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // Push spores and tentacles away from habitats (post-solver fixup).
       // The solver may push weapons pods backward into the habitat region
       // when resolving other conflicts. This ensures weapons stay posterior.
+      // Pair-aware: only move primaries, partners follow.
       for (let pass = 0; pass < 10; pass++) {
         let moved = false;
-        for (const org of candidateOrgans) {
+        for (let orgIdx = 0; orgIdx < candidateOrgans.length; orgIdx++) {
+          const org = candidateOrgans[orgIdx];
           if (org.type !== 'spore' && org.type !== 'tentacle') continue;
+          // Skip locked partners
+          if (isLockedPartner.has(orgIdx)) continue;
           for (const hab of habitats) {
             const dist = org.pos.distanceTo(hab.pos);
             const reqSpace = org.clearanceRadius * 0.5 + hab.clearanceRadius * 0.5;
@@ -2074,18 +2505,32 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             org.v = (org.v + vDir * 0.08 + 1.0) % 1.0;
             const surf = sampleOrganicSurface(org.u, org.v);
             org.pos.copy(surf.position);
-            org.normal.copy(surf.normal);
+            org.normal.copy(symmetrizeMidlineNormal(org.v, surf.normal));
+            // Sync partner
+            const partnerIdx = symmetryPartnerMap.get(orgIdx);
+            if (partnerIdx !== undefined) {
+              const partner = candidateOrgans[partnerIdx];
+              const partnerSideIdx = partner.symmetrySideIdx ?? 1;
+              const correctV = symmetryCorrectV(state.symmetryType, org.v, partnerSideIdx);
+              partner.u = org.u;
+              partner.v = correctV;
+              const psurf = sampleOrganicSurface(partner.u, partner.v);
+              partner.pos.copy(psurf.position);
+              partner.normal.copy(symmetrizeMidlineNormal(partner.v, psurf.normal));
+            }
             moved = true;
           }
         }
         if (!moved) break;
       }
 
-      // Push spiracles away from habitats
+      // Push spiracles away from habitats (pair-aware)
       for (let pass = 0; pass < 5; pass++) {
         let moved = false;
-        for (const org of candidateOrgans) {
+        for (let spirIdx = 0; spirIdx < candidateOrgans.length; spirIdx++) {
+          const org = candidateOrgans[spirIdx];
           if (org.type !== 'spiracle') continue;
+          if (isLockedPartner.has(spirIdx)) continue;
           for (const hab of habitats) {
             const dist = org.pos.distanceTo(hab.pos);
             const reqSpace = org.clearanceRadius + hab.clearanceRadius * 0.6;
@@ -2095,7 +2540,19 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             org.u = Math.max(0.32, Math.min(0.62, org.u - 0.04 * zDir));
             const surf = sampleOrganicSurface(org.u, org.v);
             org.pos.copy(surf.position);
-            org.normal.copy(surf.normal);
+            org.normal.copy(symmetrizeMidlineNormal(org.v, surf.normal));
+            // Sync partner
+            const partnerIdx = symmetryPartnerMap.get(spirIdx);
+            if (partnerIdx !== undefined) {
+              const partner = candidateOrgans[partnerIdx];
+              const partnerSideIdx = partner.symmetrySideIdx ?? 1;
+              const correctV = symmetryCorrectV(state.symmetryType, org.v, partnerSideIdx);
+              partner.u = org.u;
+              partner.v = correctV;
+              const psurf = sampleOrganicSurface(partner.u, partner.v);
+              partner.pos.copy(psurf.position);
+              partner.normal.copy(symmetrizeMidlineNormal(partner.v, psurf.normal));
+            }
             moved = true;
           }
         }
@@ -2117,7 +2574,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           isOptimalSection = organSection === 'cranial';
           break;
         case 'neural':
-          isOptimalSection = organSection === 'cranial' || organSection === 'neck';
+          isOptimalSection = true; // All sections are valid for ganglia now
           break;
         case 'spiracle':
         case 'habitat':
@@ -2187,12 +2644,35 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       const sampleSurf = sampleSurfaceRef.current;
       if (!hg || !samplePos || !sampleSurf || sn.length === 0) return;
 
-      // Collect all organ positions + clearance radii
-      const allOrgans: { pos: THREE.Vector3; clearance: number }[] = [];
-      co.forEach((org: any) => allOrgans.push({ pos: org.pos.clone(), clearance: org.clearanceRadius }));
+      // Collect all organ positions + their HULL INFLATION radius.
+      // IMPORTANT: The hull inflation radius is decoupled from the solver's
+      // clearanceRadius. The solver uses large clearance bubbles (2-4m) for
+      // organ-to-organ repulsion, but using those same values here would
+      // re-inflate the hull into a uniform tube (grub factor #1). Instead we
+      // use a small per-type inflation factor that represents the organ's
+      // actual mesh extent — just enough to keep the organ inside the hull
+      // without erasing the neck pinch or tail taper.
+      const HULL_INFLATION: Record<string, number> = {
+        eye: 0.15,
+        neural: 0.20,
+        spiracle: 0.25,
+        rib: 0.20,
+        spore: 0.25,
+        tentacle: 0.30,
+        habitat: 0.50,
+        pectoralFin: 0.15,
+        caudalFluke: 0.15,
+        landingLimb: 0.15,
+        dorsalSail: 0.15,
+      };
+      const allOrgans: { pos: THREE.Vector3; inflation: number }[] = [];
+      co.forEach((org: any) => allOrgans.push({
+        pos: org.pos.clone(),
+        inflation: HULL_INFLATION[org.type] ?? 0.25,
+      }));
       pn.forEach((node) => {
         const np = node.position;
-        allOrgans.push({ pos: new THREE.Vector3(np[0], np[1], np[2]), clearance: 0.6 });
+        allOrgans.push({ pos: new THREE.Vector3(np[0], np[1], np[2]), inflation: 0.35 });
       });
 
       const startZ = sn[0].z;
@@ -2211,7 +2691,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           const dx = organ.pos.x - node.xArch;
           const dy = organ.pos.y - node.y;
           const lateralDist = Math.sqrt(dx * dx + dy * dy);
-          const requiredRadius = lateralDist + organ.clearance * 0.7;
+          // Use the small per-type inflation factor, not the solver's clearance
+          const requiredRadius = lateralDist + organ.inflation;
           const weight = 1.0 - (dz / (nodeSpacing * 2)) * 0.5;
           const weightedRequired = requiredRadius * weight;
 
@@ -2270,7 +2751,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         co.forEach((org: any) => {
           const surf = sampleSurf(org.u, org.v);
           org.pos.copy(surf.position);
-          org.normal.copy(surf.normal);
+          org.normal.copy(symmetrizeMidlineNormal(org.v, surf.normal));
         });
       }
     };
@@ -2288,6 +2769,249 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
 
     // Run the initial adaptation
     adaptHull();
+
+    // ── Post-adaptation incline smoothing ──
+    // adaptHull() expands the hull at organ positions, which can create local
+    // bumps (steep radius jumps between adjacent spine nodes). Re-apply the
+    // 45° incline constraint to smooth these organ-driven expansions into the
+    // silhouette. This pass operates on the adapted radius (node.radius), NOT
+    // baseRadius, so it smooths the final visible shape. The neck region keeps
+    // the relaxed 65° limit so the pinch survives adaptation.
+    {
+      const MAX_SLOPE = 1.0; // 45°
+      const NECK_MAX_SLOPE = Math.tan((65 * Math.PI) / 180); // ~2.14
+      const NECK_U_MIN = 0.12, NECK_U_MAX = 0.32;
+      const tipFraction = 0.10;
+      const bStart = Math.ceil(spineNodes.length * tipFraction);
+      const bEnd = Math.floor(spineNodes.length * (1 - tipFraction));
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = bStart; i < bEnd; i++) {
+          const cur = spineNodes[i], next = spineNodes[i + 1];
+          const dz = Math.abs(next.z - cur.z);
+          if (dz < 1e-6) continue;
+          const dr = next.radius - cur.radius;
+          const dy = next.y - cur.y;
+          const slope = Math.sqrt(dr * dr + dy * dy) / dz;
+          const uMid = (i + 0.5) / (spineNodes.length - 1);
+          const limit = (uMid >= NECK_U_MIN && uMid <= NECK_U_MAX) ? NECK_MAX_SLOPE : MAX_SLOPE;
+          if (slope > limit) {
+            const scale = limit / slope;
+            next.radius = cur.radius + dr * scale;
+          }
+        }
+        for (let i = bEnd; i > bStart; i--) {
+          const cur = spineNodes[i], prev = spineNodes[i - 1];
+          const dz = Math.abs(cur.z - prev.z);
+          if (dz < 1e-6) continue;
+          const dr = prev.radius - cur.radius;
+          const dy = prev.y - cur.y;
+          const slope = Math.sqrt(dr * dr + dy * dy) / dz;
+          const uMid = (i - 0.5) / (spineNodes.length - 1);
+          const limit = (uMid >= NECK_U_MIN && uMid <= NECK_U_MAX) ? NECK_MAX_SLOPE : MAX_SLOPE;
+          if (slope > limit) {
+            const scale = limit / slope;
+            prev.radius = cur.radius + dr * scale;
+          }
+        }
+      }
+    }
+
+    // ── Command Room Hull Deformation (post-adaptation) ──
+    // Runs AFTER adaptHull() so the deformation isn't overwritten by the
+    // hull rebuild. Deforms cranial hull vertices to:
+    // 1. Conform to the command room's front face
+    // 2. Create a window opening (push window-area vertices inward)
+    const deformHullForCommandRoom = () => {
+      if (!state.showCommandRoom) return;
+      const cranialU = 0.08;
+      const headZ = spineNodes[0].z;
+      const headY = spineNodes[0].y;
+      const tailZ = spineNodes[spineNodes.length - 1].z;
+      const cranialZ = headZ + cranialU * (tailZ - headZ);
+      const _spanZ = tailZ - headZ;
+      const _tR = _spanZ <= 0 ? 0 : Math.max(0, Math.min(1, (cranialZ - headZ) / _spanZ));
+      const _fIdxR = _tR * (spineNodes.length - 1);
+      const _idxR = Math.floor(_fIdxR);
+      const _alphaR = _fIdxR - _idxR;
+      const hullR = THREE.MathUtils.lerp(
+        spineNodes[_idxR].radius,
+        spineNodes[Math.min(spineNodes.length - 1, _idxR + 1)].radius,
+        _alphaR
+      );
+      const shipLength = Math.abs(tailZ - headZ);
+      const crewCount = shipLength <= 7 ? 1 : shipLength <= 12 ? 2 : shipLength <= 17 ? 3 : shipLength <= 25 ? 4 : 5;
+      const STATION_FOOTPRINT = 2.0;
+      const STATION_HEIGHT = 2.5;
+      const FIXED_OVERHEAD = 15.0;
+      const roomVol = crewCount * STATION_FOOTPRINT * STATION_FOOTPRINT * STATION_HEIGHT + FIXED_OVERHEAD;
+      const roomH = STATION_HEIGHT + 0.5;
+      const maxRoomSide = hullR * 1.4;
+      const roomSide = Math.min(Math.sqrt(roomVol / roomH), maxRoomSide);
+      const roomCenterY = headY + hullR * 0.35;
+      const roomTopY = roomCenterY + roomH / 2;
+      const roomBotY = roomCenterY - roomH / 2;
+      const windowW = roomSide * 0.7;
+      const windowH = roomH * 0.5;
+      const windowCenterY = roomCenterY;
+
+      const hg = hullGeometryRef.current || finalHullGeometry;
+      const posAttr = hg.getAttribute('position') as THREE.BufferAttribute;
+      const roomXMax = roomSide / 2;
+      const roomXMin = -roomXMax;
+      const roomZMax = cranialZ + roomSide / 2;
+      const roomZMin = cranialZ - roomSide / 2;
+      const winXMin = -windowW / 2;
+      const winXMax = windowW / 2;
+      const winYMin = windowCenterY - windowH / 2;
+      const winYMax = windowCenterY + windowH / 2;
+
+      let deformCount = 0;
+      let windowCount = 0;
+      for (let i = 0; i <= numCrossU; i++) {
+        const u = i / numCrossU;
+        if (u < 0.01 || u > 0.20) continue;
+        const uDist = Math.abs(u - cranialU);
+        const uFalloff = Math.max(0, 1.0 - uDist / 0.10);
+        const uSmooth = uFalloff * uFalloff * (3 - 2 * uFalloff);
+
+        for (let j = 0; j <= numCrossV; j++) {
+          const idx = i * (numCrossV + 1) + j;
+          const px = posAttr.getX(idx);
+          const py = posAttr.getY(idx);
+          const pz = posAttr.getZ(idx);
+
+          if (py < headY) continue;
+
+          const withinRoomX = px > roomXMin - 0.2 && px < roomXMax + 0.2;
+          const withinRoomY = py > roomBotY - 0.2 && py < roomTopY + 0.2;
+          if (!withinRoomX || !withinRoomY) continue;
+
+          const insideRoomZ = pz > roomZMin && pz < roomZMax;
+          if (!insideRoomZ) continue;
+
+          const insideWindowX = px > winXMin && px < winXMax;
+          const insideWindowY = py > winYMin && py < winYMax;
+
+          if (insideWindowX && insideWindowY) {
+            // Window opening: push vertex well below the room to create a clear gap
+            const pushDown = (roomCenterY - headY) * 2.0 * uSmooth;
+            posAttr.setY(idx, py - pushDown);
+            windowCount++;
+          } else {
+            // Conform: push vertex to the room's front face (anterior wall)
+            const targetZ = roomZMin - 0.05;
+            posAttr.setZ(idx, THREE.MathUtils.lerp(pz, targetZ, uSmooth * 0.9));
+            deformCount++;
+          }
+        }
+      }
+      posAttr.needsUpdate = true;
+      hg.computeVertexNormals();
+    };
+
+    deformHullForCommandRoomRef.current = deformHullForCommandRoom;
+    deformHullForCommandRoom();
+
+    // ── Post-adaptation overlap check ──
+    // After hull adaptation + smoothing, organs are re-projected to the new
+    // hull surface. This can move organs closer together if the hull didn't
+    // expand enough. Run a lightweight overlap check and resolve via PBD.
+    // (See docs/research/ORGAN_PLACEMENT_OVERHAUL_RESEARCH.md Phase 3)
+    {
+      const postOverlaps: { a: string; b: string; dist: number; req: number }[] = [];
+      for (let i = 0; i < candidateOrgans.length; i++) {
+        for (let j = i + 1; j < candidateOrgans.length; j++) {
+          const a = candidateOrgans[i];
+          const b = candidateOrgans[j];
+          const dist = a.pos.distanceTo(b.pos);
+          const req = (a.clearanceRadius + b.clearanceRadius) * 0.7;
+          if (dist < req) {
+            postOverlaps.push({ a: a.id, b: b.id, dist, req });
+          }
+        }
+      }
+      if (postOverlaps.length > 0) {
+        // Run PBD passes to resolve post-adaptation overlaps.
+        // Pair-aware: only primaries are movable; locked partners are immovable
+        // so the PBD solver can't break symmetry. Partners are synced after.
+        const placementOrgans = candidateOrgans.map((o, idx) => ({
+          id: o.id,
+          type: o.type,
+          u: o.u,
+          v: o.v,
+          pos: o.pos.clone(),
+          normal: o.normal.clone(),
+          clearanceRadius: o.clearanceRadius,
+          movable: !isLockedPartner.has(idx), // locked partners don't move
+          uBounds: getUBounds(o.type),
+        }));
+        const sampleFn = (u: number, v: number) => sampleOrganicSurface(u, v);
+        const result = solveOverlapsPBD(placementOrgans, sampleFn, getUBounds);
+        // Write resolved positions back (only for moved organs)
+        for (const po of placementOrgans) {
+          const co = candidateOrgans.find(o => o.id === po.id);
+          if (co) {
+            co.u = po.u;
+            co.v = po.v;
+            co.pos.copy(po.pos);
+            co.normal.copy(po.normal);
+          }
+        }
+        // Sync locked partners to their primary's new position
+        if (state.symmetryType !== 'asymmetrical') {
+          for (const [primaryIdx, partnerIdx] of symmetryPartnerMap) {
+            const primary = candidateOrgans[primaryIdx];
+            const partner = candidateOrgans[partnerIdx];
+            const partnerSideIdx = partner.symmetrySideIdx ?? 1;
+            const correctV = symmetryCorrectV(state.symmetryType, primary.v, partnerSideIdx);
+            partner.u = primary.u;
+            partner.v = correctV;
+            const psurf = sampleOrganicSurface(partner.u, partner.v);
+            partner.pos.copy(psurf.position);
+            partner.normal.copy(symmetrizeMidlineNormal(partner.v, psurf.normal));
+          }
+        }
+        console.log(`[Post-Adaptation Overlap Check] ${postOverlaps.length} overlaps found, PBD resolved ${result.resolved}, unresolved: ${result.unresolved}`);
+      }
+    }
+
+    // ── SYMMETRY ENFORCEMENT PASS (safety net) ──
+    // With the pair-locked solver preserving V by construction, this pass
+    // should be a no-op. It's kept as a safety net to catch any drift from
+    // the post-adaptation PBD or hull re-projection.
+    {
+      const symmetry = state.symmetryType;
+      if (symmetry !== 'asymmetrical') {
+        const groups = new Map<string, typeof candidateOrgans>();
+        for (const co of candidateOrgans) {
+          if (!co.symmetryGroupId) continue;
+          if (!groups.has(co.symmetryGroupId)) groups.set(co.symmetryGroupId, []);
+          groups.get(co.symmetryGroupId)!.push(co);
+        }
+
+        let enforced = 0;
+        for (const [, groupOrgans] of groups) {
+          const primary = groupOrgans.find(o => o.symmetrySideIdx === 0) || groupOrgans[0];
+          if (!primary) continue;
+          for (const partner of groupOrgans) {
+            if (partner === primary) continue;
+            const sideIdx = partner.symmetrySideIdx ?? 1;
+            const correctV = symmetryCorrectV(symmetry, primary.v, sideIdx);
+            if (Math.abs(partner.v - correctV) > 0.001) {
+              partner.v = correctV;
+              partner.u = primary.u;
+              const surf = sampleOrganicSurface(primary.u, correctV);
+              partner.pos.copy(surf.position);
+              partner.normal.copy(symmetrizeMidlineNormal(partner.v, surf.normal));
+              enforced++;
+            }
+          }
+        }
+        if (enforced > 0) {
+          console.log(`[Symmetry Enforcement] Re-projected ${enforced} organs to symmetry-correct V positions (${symmetry})`);
+        }
+      }
+    }
 
     // ── Hull SDF for anatomical-aware seamless organ blending ──
     // Update the BlendBridgeManager's hull SDF from the post-adaptation spine nodes.
@@ -2336,6 +3060,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // 2. Build Socket Collar (Removed - Using Blend Bridges for seamless shrink-wrap integration)
 
       // 3. Build Organ Geometry depending on Type
+      // System debug visibility: skip mesh creation if the organ's system is hidden
+      if (org.type === 'spiracle' && !state.showSystemRespiratory) return;
+      if ((org.type === 'rib' || org.type === 'eye' || org.type === 'spore' || org.type === 'tentacle') && !state.showSystemSurfaceOrgans) return;
+      if ((org.type === 'pectoralFin' || org.type === 'caudalFluke' || org.type === 'landingLimb' || org.type === 'dorsalSail') && !state.showSystemAppendages) return;
+      if (org.type === 'neural' && !state.showSystemNeural) return;
+      if (org.type === 'habitat' && !state.showSystemLifeSupport) return;
+
       if (org.type === 'spiracle') {
         const ventGeo = new THREE.TorusGeometry(0.32, 0.09, 8, 12);
         const ventMesh = new THREE.Mesh(ventGeo, mats.flesh);
@@ -2999,11 +3730,81 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       }
     });
 
+    // ── Nerve Branches (Neural Compute Architecture spec §4.4) ──
+    // After all ganglia and organs are placed and solved, generate visible
+    // nerve branches from each ganglion to its nearest target organs.
+    // Guarded by showNerveBranches && showSystemNeural.
+    // Nerve radius follows Murray's law: thicker for higher-demand organs.
+    if (state.showNerveBranches && state.showSystemNeural) {
+      const maxBranchLength = calculateMaxBranchLengthForShip(length);
+      // Collect non-neural organs as nerve targets (with their compute demand)
+      const nerveTargets = candidateOrgans
+        .filter((o) => o.type !== 'neural')
+        .map((o) => ({
+          id: o.id,
+          type: o.type,
+          pos: o.pos.clone(),
+          demand: ORGAN_COMPUTE_DEMAND[o.type] ?? 0.5,
+        }));
+      const maxDemand = nerveTargets.reduce((mx, t) => Math.max(mx, t.demand), 0.001);
+
+      // Collect ganglion positions (dorsal + ventral)
+      const ganglia = candidateOrgans.filter((o) => o.type === 'neural');
+
+      // Create a neural-specific bioluminescent material for nerve branches
+      const nerveTheme = themes[state.theme];
+      const nerveMat = new THREE.MeshStandardMaterial({
+        color: nerveTheme.glow,
+        emissive: nerveTheme.glow,
+        emissiveIntensity: 2.4,
+        roughness: 0.15,
+        transparent: true,
+        opacity: 0.85,
+        wireframe: state.viewMode === 'wireframe',
+      });
+
+      for (const ganglion of ganglia) {
+        const ganglionPos = ganglion.pos.clone();
+        // Find nearest organs within maxBranchLength
+        const nearby = findNearestOrgans(ganglionPos, nerveTargets, maxBranchLength);
+        // Limit to a few nearest organs per ganglion to avoid visual clutter
+        const assigned = nearby.slice(0, 3);
+        if (assigned.length === 0) continue;
+
+        // Murray's law: parent radius based on daughter count
+        const parentRadius = calculateMurrayBranchRadius(NEURAL_CONSTANTS.BASE_NERVE_RADIUS * 2.5, assigned.length);
+
+        for (let ai = 0; ai < assigned.length; ai++) {
+          const target = assigned[ai];
+          const organNerveRadius = calculateOrganNerveRadius(target.demand, maxDemand);
+          // Blend Murray parent radius with organ-demand radius
+          const nerveRadius = Math.max(organNerveRadius, parentRadius * 0.6);
+          const nerveGeo = generateNerveBranch(ganglionPos, target.pos, nerveRadius);
+          const nerveMesh = new THREE.Mesh(nerveGeo, nerveMat);
+          nerveMesh.userData = {
+            name: `Nerve Branch (${ganglion.name} -> ${target.id})`,
+            category: 'Nervous Subsystem',
+            desc: 'Bioluminescent nerve branch connecting a ganglion to its target organ.',
+            pipeline: 'NERVOUS',
+            role: 'DISTRIBUTION',
+            isNerveBranch: true,
+            ganglionId: ganglion.id,
+            targetOrganId: target.id,
+            nerveRadius,
+            pulsePhase: ganglion.extra?.pulsePhase || 0,
+          };
+          shipGroup.add(nerveMesh);
+          animatedOrgansRef.current.push(nerveMesh);
+        }
+      }
+    }
+
     // HUMAN HABITAT HALLWAY CONNECTIONS
     // Every habitat must have at least 1 hallway connection to another habitat.
     // We build a Minimum Spanning Tree (Prim's algorithm) over Euclidean distance
     // between habitat room centers — this guarantees full connectivity with no cycles.
     // When two connected habitats sit at different heights (|Δy| > STAIR_THRESHOLD),
+    if (state.showSystemLifeSupport) {
     // a staircase segment is inserted in the hallway to bridge the vertical offset.
     const habitatCenters: { name: string; pos: THREE.Vector3; normal: THREE.Vector3 }[] = [];
     {
@@ -3122,8 +3923,228 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         }
       });
     }
+    } // end showSystemLifeSupport (hallways + stairs)
+
+    // COMMAND ROOM — Square room at cranial section (head of ship)
+    // Per COMMAND_ROOM_SPEC.md: houses 1-5 human crew in individual workstations
+    // with negative-gravity grounding. Window cut at max window angle plane.
+    // Aesthetic: Interface Layer (Frutiger Aero / skeuomorphic futurism).
+    if (state.showCommandRoom) {
+      const cranialU = 0.08; // cranial section u-coordinate
+      // Position the room centered on the spine (x=0), at the cranial Z,
+      // shifted dorsally (upward) so the window can look forward over the head.
+      // The room sits at the top of the cranial hull, embedded just below the dorsal surface.
+      const cranialZ = headNode.z + cranialU * (tailNode.z - headNode.z);
+      const hullRadiusAtHead = sampleRadiusAtZ(cranialZ);
+      const roomPos = new THREE.Vector3(0, headNode.y + hullRadiusAtHead * 0.35, cranialZ);
+
+      // Crew capacity scales on integers by ship length
+      const shipLength = Math.abs(tailNode.z - headNode.z);
+      const crewCount = shipLength <= 7 ? 1 : shipLength <= 12 ? 2 : shipLength <= 17 ? 3 : shipLength <= 25 ? 4 : 5;
+
+      // Room dimensions (square footprint)
+      const STATION_FOOTPRINT = 2.0;
+      const STATION_HEIGHT = 2.5;
+      const FIXED_OVERHEAD = 15.0;
+      const roomVolume = crewCount * STATION_FOOTPRINT * STATION_FOOTPRINT * STATION_HEIGHT + FIXED_OVERHEAD;
+      const roomHeight = STATION_HEIGHT + 0.5; // ceiling clearance
+      // Clamp room size so it fits inside the cranial hull radius
+      const maxRoomSide = hullRadiusAtHead * 1.4; // allow slight protrusion (window cut)
+      const roomSide = Math.min(Math.sqrt(roomVolume / roomHeight), maxRoomSide);
+
+      // Skin depth: room floor sits a few cm below hull surface
+      const SKIN_DEPTH = 0.05;
+
+      // Room center: centered on spine (x=0), dorsal in the head
+      const roomCenter = roomPos.clone();
+
+      // Room shell — glossy white (Frutiger Aero), visible from outside
+      const roomShellMat = new THREE.MeshStandardMaterial({
+        color: 0xf0f8ff,
+        roughness: 0.15,
+        metalness: 0.1,
+        emissive: 0x00ced1,
+        emissiveIntensity: 0.3,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const roomShellGeo = new THREE.BoxGeometry(roomSide, roomHeight, roomSide);
+      const roomShell = new THREE.Mesh(roomShellGeo, roomShellMat);
+      roomShell.position.copy(roomCenter);
+      roomShell.userData = {
+        name: `Command Room Shell (${crewCount} Crew)`,
+        category: 'Life Support',
+        desc: `Square command room at the head of the ship housing ${crewCount} crew member(s). Negative-gravity grounded.`,
+      };
+      shipGroup.add(roomShell);
+
+      // Floor — bright accent color (cyan #00CED1) with gravity field glow
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x00ced1,
+        roughness: 0.3,
+        metalness: 0.2,
+        emissive: 0x00ced1,
+        emissiveIntensity: 0.15,
+      });
+      const floorGeo = new THREE.BoxGeometry(roomSide, 0.05, roomSide);
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.position.copy(roomCenter);
+      floor.position.y -= roomHeight / 2;
+      floor.userData = { name: 'Command Room Floor (Gravity Field)', category: 'Life Support' };
+      shipGroup.add(floor);
+
+      // Ceiling — translucent panels revealing bioluminescent amber backlighting
+      const ceilingMat = new THREE.MeshStandardMaterial({
+        color: 0xffb347,
+        roughness: 0.2,
+        metalness: 0.0,
+        emissive: 0xffb347,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.6,
+      });
+      const ceilingGeo = new THREE.BoxGeometry(roomSide, 0.05, roomSide);
+      const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
+      ceiling.position.copy(roomCenter);
+      ceiling.position.y += roomHeight / 2;
+      ceiling.userData = { name: 'Command Room Ceiling (Bioluminescent Backlight)', category: 'Life Support' };
+      shipGroup.add(ceiling);
+
+      // Window cut — transparent pane with cyan tint at the anterior hull
+      // The window is at the max window angle plane (top exterior edge)
+      const windowWidth = roomSide * 0.7;
+      const windowHeight = roomHeight * 0.5;
+      const windowMat = new THREE.MeshPhysicalMaterial({
+        color: 0x00ced1,
+        roughness: 0.0,
+        metalness: 0.0,
+        transmission: 0.9,
+        transparent: true,
+        opacity: 0.35,
+        ior: 1.5,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.0,
+      });
+      const windowGeo = new THREE.BoxGeometry(windowWidth, windowHeight, 0.04);
+      const windowPane = new THREE.Mesh(windowGeo, windowMat);
+      // Position at the anterior face of the room, facing forward
+      windowPane.position.copy(roomCenter);
+      windowPane.position.z = roomCenter.z - roomSide / 2;
+      windowPane.userData = { name: 'Command Room Window (Max Angle Cut)', category: 'Life Support' };
+      shipGroup.add(windowPane);
+
+      // Window frame — thin metallic border (cassette futurism)
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: 0x8b7d6b,
+        roughness: 0.4,
+        metalness: 0.6,
+      });
+      const frameThickness = 0.08;
+      const frameTopGeo = new THREE.BoxGeometry(windowWidth + frameThickness * 2, frameThickness, 0.06);
+      const frameTop = new THREE.Mesh(frameTopGeo, frameMat);
+      frameTop.position.copy(windowPane.position);
+      frameTop.position.y += windowHeight / 2 + frameThickness / 2;
+      shipGroup.add(frameTop);
+      const frameBot = new THREE.Mesh(frameTopGeo, frameMat);
+      frameBot.position.copy(windowPane.position);
+      frameBot.position.y -= windowHeight / 2 + frameThickness / 2;
+      shipGroup.add(frameBot);
+      const frameSideGeo = new THREE.BoxGeometry(frameThickness, windowHeight + frameThickness * 2, 0.06);
+      const frameLeft = new THREE.Mesh(frameSideGeo, frameMat);
+      frameLeft.position.copy(windowPane.position);
+      frameLeft.position.x -= windowWidth / 2 + frameThickness / 2;
+      shipGroup.add(frameLeft);
+      const frameRight = new THREE.Mesh(frameSideGeo, frameMat);
+      frameRight.position.copy(windowPane.position);
+      frameRight.position.x += windowWidth / 2 + frameThickness / 2;
+      shipGroup.add(frameRight);
+
+      // Crew stations — semicircle arrangement facing the window
+      const crewRoles = ['Commander', 'Helm', 'Bio-Systems Officer', 'Tactical', 'Science/Sensors'];
+      const chairMat = new THREE.MeshStandardMaterial({
+        color: 0xf0f8ff,
+        roughness: 0.2,
+        metalness: 0.1,
+      });
+      const consoleMat = new THREE.MeshStandardMaterial({
+        color: 0x00ced1,
+        roughness: 0.1,
+        metalness: 0.3,
+        emissive: 0x00ced1,
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.7,
+      });
+
+      for (let c = 0; c < crewCount; c++) {
+        const role = crewRoles[c];
+        // Semicircle arrangement facing forward (window)
+        const angleRange = Math.PI * 0.6; // 108 degrees spread
+        const angle = -angleRange / 2 + (crewCount > 1 ? (c / (crewCount - 1)) * angleRange : 0);
+        const stationRadius = roomSide * 0.25;
+        const stationX = roomCenter.x + Math.sin(angle) * stationRadius;
+        const stationZ = roomCenter.z + Math.cos(angle) * stationRadius * 0.5;
+
+        // Chair — rounded, ergonomic, glossy white
+        const chairGeo = new THREE.BoxGeometry(0.6, 0.8, 0.6);
+        const chair = new THREE.Mesh(chairGeo, chairMat);
+        chair.position.set(stationX, roomCenter.y - roomHeight / 2 + 0.4, stationZ);
+        chair.userData = { name: `Crew Station: ${role} (Chair)`, category: 'Life Support' };
+        shipGroup.add(chair);
+
+        // Console — curved holographic display (translucent cyan plane)
+        const consoleGeo = new THREE.BoxGeometry(0.8, 0.4, 0.05);
+        const console = new THREE.Mesh(consoleGeo, consoleMat);
+        console.position.set(stationX, roomCenter.y - roomHeight / 2 + 0.9, stationZ - 0.4);
+        console.rotation.x = -Math.PI / 6; // tilt toward crew
+        console.userData = { name: `Crew Station: ${role} (Console)`, category: 'Life Support' };
+        shipGroup.add(console);
+
+        // Commander gets a neural-link connection to the Brain Core
+        if (c === 0) {
+          const brainMesh = shipGroup.children.find((ch) =>
+            ch.userData?.name === 'Primary Ganglion Brain Core'
+          ) as THREE.Mesh | undefined;
+          if (brainMesh) {
+            const linkCurve = new THREE.LineCurve3(
+              new THREE.Vector3(stationX, roomCenter.y - roomHeight / 2 + 0.9, stationZ - 0.4),
+              brainMesh.position.clone()
+            );
+            const linkGeo = new THREE.TubeGeometry(linkCurve, 8, 0.03, 6, false);
+            const linkMat = new THREE.MeshStandardMaterial({
+              color: 0x00ced1,
+              emissive: 0x00ced1,
+              emissiveIntensity: 0.5,
+              transparent: true,
+              opacity: 0.6,
+            });
+            const neuralLink = new THREE.Mesh(linkGeo, linkMat);
+            neuralLink.userData = { name: 'Commander Neural-Link to Brain Core', category: 'Nervous Subsystem' };
+            shipGroup.add(neuralLink);
+          }
+        }
+      }
+
+      // Central shared display — hovering holographic sphere
+      const displayMat = new THREE.MeshStandardMaterial({
+        color: 0x00ced1,
+        emissive: 0x00ced1,
+        emissiveIntensity: 0.4,
+        transparent: true,
+        opacity: 0.5,
+        wireframe: true,
+      });
+      const displayGeo = new THREE.IcosahedronGeometry(0.3, 1);
+      const centralDisplay = new THREE.Mesh(displayGeo, displayMat);
+      centralDisplay.position.copy(roomCenter);
+      centralDisplay.position.y += 0.3;
+      centralDisplay.userData = { name: 'Command Room Central Display (Holographic)', category: 'Life Support' };
+      shipGroup.add(centralDisplay);
+    } // end showCommandRoom
 
     // MUSCULAR CONNECTIVE TENDONS
+    if (state.showSystemMuscular) {
     const tendonCount = state.tendonDensity;
     for (let t = 0; t < tendonCount; t++) {
       const uA = 0.1 + rng() * 0.7;
@@ -3148,44 +4169,62 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       };
       shipGroup.add(tendonMesh);
     }
+    } // end showSystemMuscular
 
     // CAUDAL ENGINE COWL & BIO-PLASMA THRUSTERS
+    // Dynamic engine sizing: cowl radius, height, thruster scale, and plume
+    // length are all derived from ship mass (allometric M^0.33 scaling),
+    // propulsion media type (intake type), and energy generation/consumption
+    // ratio. See docs/research/PROPULSION_SCALING_RESEARCH.md and
+    // src/utils/propulsionSizing.ts for the full model.
+    if (state.showSystemPropulsion) {
     const thrusterCount = state.bioThrusters;
     const caudalNode = spineNodes[spineNodes.length - 1];
 
-    // Ensure the engine housing has enough area to fit the variable number of thrusters
-    const engineBaseRadius = Math.max(1.2 + thrusterCount * 0.15, caudalNode.radius * 1.5);
+    const engineParams: EngineGeometryParams = computeEngineGeometry(
+      state,
+      caudalNode.radius,
+      energyGen,
+      energyLoad,
+    );
 
-    const caudalCapGeo = new THREE.CylinderGeometry(engineBaseRadius * 0.45, engineBaseRadius * 1.15, 1.4, 16);
+    const engineBaseRadius = engineParams.cowlRadius;
+
+    const caudalCapGeo = new THREE.CylinderGeometry(
+      engineParams.cowlApertureRadius,
+      engineBaseRadius * 1.15,
+      engineParams.cowlHeight,
+      16,
+    );
     caudalCapGeo.rotateX(Math.PI / 2);
     const caudalMesh = new THREE.Mesh(caudalCapGeo, mats.carapace);
-    caudalMesh.position.set(0, caudalNode.y, caudalNode.z + 0.3);
+    caudalMesh.position.set(0, caudalNode.y, caudalNode.z + engineParams.cowlHeight * 0.2);
     caudalMesh.userData = {
       name: 'Integral Caudal Stern Engine Cowl Manifold',
       category: 'Exoskeleton Manifold',
-      desc: 'Reinforced caudal tail housing incorporating bio-plasma sphincter vents.',
+      desc: 'Reinforced caudal tail housing incorporating bio-plasma sphincter vents. Dynamically scaled to ship mass and propulsion media.',
       metabolicRate: '15.0 mL/min Chitin Fuel Supply',
       enzymaticPressure: '16.5 MPa Capacity',
       requiredFluid: 'Osteo-Chitin Mineralizing Sap',
+      shipMass: `${Math.round(engineParams.shipMass)} kg`,
+      requiredThrust: `${Math.round(engineParams.requiredThrust)} N`,
+      thrustToWeight: engineParams.twr.toFixed(3),
     };
     shipGroup.add(caudalMesh);
 
     // Fermat's spiral (sunflower) for optimal non-overlapping topology
     const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const thrusterScale = engineParams.thrusterScale;
 
     for (let i = 0; i < thrusterCount; i++) {
       const fraction = (i + 0.5) / thrusterCount;
-      const radiusOffset = Math.sqrt(fraction) * (engineBaseRadius * 0.85); 
+      const radiusOffset = Math.sqrt(fraction) * (engineBaseRadius * 0.85);
       const angle = i * goldenAngle;
-      
-      // Calculate dynamic scale to ensure they fit without clipping
-      const maxAvailableRadius = (engineBaseRadius * 0.9) / Math.sqrt(thrusterCount);
-      const thrusterScale = Math.min(1.0, maxAvailableRadius / 0.8);
 
       const tx = Math.cos(angle) * radiusOffset;
       const ty = caudalNode.y + Math.sin(angle) * radiusOffset;
-      const domeZ = (1 - fraction) * 0.4;
-      const tz = caudalNode.z + 0.4 + domeZ;
+      const domeZ = (1 - fraction) * engineParams.cowlHeight * 0.3;
+      const tz = caudalNode.z + engineParams.cowlHeight * 0.3 + domeZ;
 
       const thrustPos = new THREE.Vector3(tx, ty, tz);
       // Thrust direction slightly splayed outwards
@@ -3193,9 +4232,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       const nozzleQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), thrustDir);
 
       const socketPos = new THREE.Vector3(tx, ty, tz - 0.2);
-      createSocketCollar(socketPos, thrustDir, 0.62 * thrusterScale, 0.45 * thrusterScale, mats.carapace, `Bio-Plasma Caudal Sphincter Socket Collar #${i + 1}`);
+      createSocketCollar(socketPos, thrustDir, engineParams.socketRadius, engineParams.socketHeight, mats.carapace, `Bio-Plasma Caudal Sphincter Socket Collar #${i + 1}`);
 
-      const nozzleGeo = new THREE.TorusGeometry(0.55 * thrusterScale, 0.18 * thrusterScale, 12, 20);
+      const nozzleGeo = new THREE.TorusGeometry(engineParams.nozzleRadius, engineParams.nozzleTubeRadius, 12, 20);
       const nozzleMesh = new THREE.Mesh(nozzleGeo, mats.carapace);
       nozzleMesh.position.set(tx, ty, tz);
       nozzleMesh.quaternion.copy(nozzleQuat);
@@ -3203,13 +4242,13 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       nozzleMesh.userData = {
         name: `Bio-Plasma Sphincter Vent Nozzle #${i + 1}`,
         category: 'Propulsion Vent',
-        desc: 'Thermal propulsive duct venting energized organic plasma.',
+        desc: 'Thermal propulsive duct venting energized organic plasma. Scaled to ship mass and energy output.',
         metabolicRate: '58.0 mL/min Propellant Draw',
         neuralFreq: '240 Hz Caudal Valve Pulsation',
         enzymaticPressure: '18.5 bar Combustion Thrust',
-        clearanceRadius: '0.55m Active Force Field',
+        clearanceRadius: `${engineParams.nozzleRadius.toFixed(2)}m Active Force Field`,
         isInterceptable: false,
-        minFreeSpace: '0.8m Nozzle Clearance Zone',
+        minFreeSpace: `${(engineParams.nozzleRadius * 1.5).toFixed(2)}m Nozzle Clearance Zone`,
       };
       shipGroup.add(nozzleMesh);
 
@@ -3224,25 +4263,30 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         metabolicRate: '58.0 mL/min Propellant Draw',
         neuralFreq: '240 Hz Caudal Valve Pulsation',
         enzymaticPressure: '18.5 bar Combustion Thrust',
-        clearanceRadius: '0.55m Active Force Field',
+        clearanceRadius: `${engineParams.nozzleRadius.toFixed(2)}m Active Force Field`,
         isInterceptable: false,
-        minFreeSpace: '0.8m Nozzle Clearance Zone',
+        minFreeSpace: `${(engineParams.nozzleRadius * 1.5).toFixed(2)}m Nozzle Clearance Zone`,
       });
 
-      const plumeGeo = new THREE.ConeGeometry(0.62 * thrusterScale, 3.8 * thrusterScale, 12, 1, true);
+      // Plume: length and intensity coupled to energy status
+      const plumeGeo = new THREE.ConeGeometry(engineParams.plumeRadius, engineParams.plumeLength, 12, 1, true);
       plumeGeo.rotateX(Math.PI / 2);
-      plumeGeo.translate(0, 0, 1.9 * thrusterScale);
+      plumeGeo.translate(0, 0, engineParams.plumeLength * 0.5);
 
       const plumeMesh = new THREE.Mesh(plumeGeo, mats.thrusterCore);
       plumeMesh.position.set(tx, ty, tz);
       plumeMesh.quaternion.copy(nozzleQuat);
+      // Apply energy-coupled intensity as opacity/scale
+      plumeMesh.scale.setScalar(engineParams.plumeIntensity);
       shipGroup.add(plumeMesh);
 
       animatedThrustersRef.current.push(plumeMesh);
       thrusterExhaustPointsRef.current.push(new THREE.Vector3(tx, ty, tz + 0.5));
     }
+    } // end showSystemPropulsion
 
     // MURRAY'S LAW AUTO-WIRED VASCULAR VEIN NETWORK
+    if (state.showSystemVascular) {
     const trunkPoints: THREE.Vector3[] = [];
     for (let i = 0; i < spineNodes.length; i++) {
       const node = spineNodes[i];
@@ -3281,7 +4325,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       for (let i = 0; i < spineNodes.length; i++) {
         const uCoord = i / (spineNodes.length - 1);
         const surf = sampleOrganicSurface(uCoord, vCoord % 1.0);
-        veinPath.push(surf.position.clone().addScaledVector(surf.normal, -0.45));
+        const veinNormal = symmetrizeMidlineNormal(vCoord, surf.normal);
+        veinPath.push(surf.position.clone().addScaledVector(veinNormal, -0.45));
       }
 
       const curve = new THREE.CatmullRomCurve3(veinPath);
@@ -3356,16 +4401,17 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       shipGroup.add(branchMesh);
       animatedVesselsRef.current.push(branchMesh);
     });
+    } // end showSystemVascular (flank arteries + auto-wired veins)
 
     // ── B-Spline Conduit Tubes with Flow Particles (pipelineGraph.ts §3.2) ──
     // Iterate pipelineConnections and build semi-transparent tube meshes with
     // animated flow particles travelling source → target along each CatmullRomCurve3.
     const conduitToggleMap: Record<OrganPipelineType, boolean> = {
-      BIO_PLASMA: state.showConduitBioPlasma,
-      HEMOLYMPH: state.showConduitHemolymph,
-      NERVOUS: state.showConduitNervous,
-      LIFE_SUPPORT: state.showConduitLifeSupport,
-      ARMOR_DEFENSE: state.showConduitArmorDefense,
+      BIO_PLASMA: state.showConduitBioPlasma && state.showSystemBioPlasma,
+      HEMOLYMPH: state.showConduitHemolymph && state.showSystemCirculatory,
+      NERVOUS: state.showConduitNervous && state.showSystemNeural,
+      LIFE_SUPPORT: state.showConduitLifeSupport && state.showSystemLifeSupport,
+      ARMOR_DEFENSE: state.showConduitArmorDefense && state.showSystemArmorDefense,
     };
 
     // Reset conduit group refs
@@ -3441,7 +4487,18 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
       // The anatomical rules registry approves this for all conduit→organ connections
       // (the "veins to heart" pattern). The bridge blends the conduit tube SDF
       // with the organ SDF at the organ's position, creating a seamless root.
-      {
+      //
+      // SKIP for highway/cord/trunk target nodes: these are already represented
+      // by explicit TubeGeometry meshes running along the spine (Aorta Highway,
+      // Spinal Axon Cord, Plasma Highway). A conduit blending into them via SDF
+      // creates a flat fillet patch at a single point on what is really a long
+      // tube structure — anatomically wrong and visually noisy.
+      const HIGHWAY_NODES: Set<string> = new Set([
+        NODE_IDS.AXON_CORD,
+        NODE_IDS.AORTA_HIGHWAY,
+        NODE_IDS.PLASMA_TRUNK,
+      ]);
+      if (!HIGHWAY_NODES.has(conn.targetNodeId)) {
         const bm = blendBridgeManagerRef.current;
         if (bm) {
           const sourceNode = nodeMap.get(conn.sourceNodeId);
@@ -3489,7 +4546,14 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
             const organU = Math.max(0, Math.min(1, (worldPos.z - hullStartZ) / hullLength));
             const organSection = uToSection(organU);
 
-            const matchedNode = pipelineNodes.find(pn => pn.name === name || obj.userData.name.includes(pn.name));
+            // Match by exact name first, then by pipeline+role combination.
+            // Substring includes() is too broad — "Heart" matches "Aorta Central Heart Core".
+            const organPipeline = obj.userData.pipeline;
+            const organRole = obj.userData.role;
+            const matchedNode = pipelineNodes.find(pn => pn.name === name) ||
+              (organPipeline && organRole
+                ? pipelineNodes.find(pn => pn.pipeline === organPipeline && pn.role === organRole)
+                : undefined);
             const baseEnergyCost = matchedNode?.telemetry?.baseEnergyCost || 0;
 
             organNodes.push({
@@ -3612,9 +4676,12 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         if ((isAirlock(nameA) && isFinOrSail(nameB)) ||
             (isAirlock(nameB) && isFinOrSail(nameA))) return true;
         
-        // Exclude all false-positive AABB checks between massive fins and other surface nodes
-        // (the solver already guarantees their roots don't intersect, and their meshes point away)
-        const isSmallSurface = (n: string) => n.includes('Spiracle') || n.includes('Habitat') || n.includes('Stomata') || n.includes('Nanite') || n.includes('Node');
+        // Exclude false-positive AABB checks between massive fins/flukes/sails and
+        // small surface effectors that share the same hull region. The solver
+        // already guarantees their roots don't intersect, and their meshes extend
+        // outward in different directions. NOTE: 'Node' intentionally excluded —
+        // it matches nearly every pipeline organ and would mask real bugs.
+        const isSmallSurface = (n: string) => n.includes('Spiracle') || n.includes('Habitat') || n.includes('Stomata') || n.includes('Nanite');
         if ((isFinOrSail(nameA) && isSmallSurface(nameB)) ||
             (isFinOrSail(nameB) && isSmallSurface(nameA))) return true;
         if ((isSpiracle(nameA) && isRibSpur(nameB)) || (isSpiracle(nameB) && isRibSpur(nameA))) return true;
@@ -3994,6 +5061,112 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         );
       }
       console.log('---------------------------------------------');
+
+      // ── Bounding Box Symmetry Test (multi-mode) ──
+      // Creates a bounding box around the whole ship, divides it into sectors
+      // based on the active symmetry type, and verifies equal organ counts.
+      if (state.showSystemDebug) {
+        const organPlacements = candidateOrgans.map(o => ({
+          id: o.id,
+          type: o.type,
+          pos: { x: o.pos.x, y: o.pos.y, z: o.pos.z },
+          clearanceRadius: o.clearanceRadius,
+        }));
+        const symResult = testSymmetry(organPlacements, state.symmetryType, 0.3);
+        const bb = symResult.boundingBox;
+        const sectorStr = symResult.sectorCounts.join(', ');
+        console.log(
+          `[SYMMETRY BOX] ${state.symmetryType} | X=[${bb.minX.toFixed(1)}, ${bb.maxX.toFixed(1)}] Y=[${bb.minY.toFixed(1)}, ${bb.maxY.toFixed(1)}] Z=[${bb.minZ.toFixed(1)}, ${bb.maxZ.toFixed(1)}]\n` +
+          `  Sectors: [${sectorStr}] | Midline: ${symResult.midlineCount} | Unmatched: ${symResult.unmatched}`
+        );
+        if (symResult.passed) {
+          console.log(`  [SYMMETRY PASSED] All sectors contain matching organ counts.`);
+        } else {
+          console.warn(`  [SYMMETRY FAILED] ${symResult.errors.join('; ')}`);
+        }
+
+        // Visual bounding box overlay — wireframe box with symmetry dividers
+        const existingBox = shipGroup.children.find(c => c.name === '__symmetry_box');
+        if (existingBox) shipGroup.remove(existingBox);
+
+        const boxSize = {
+          x: Math.max(0.1, bb.maxX - bb.minX),
+          y: Math.max(0.1, bb.maxY - bb.minY),
+          z: Math.max(0.1, bb.maxZ - bb.minZ),
+        };
+        const boxCenter = {
+          x: (bb.minX + bb.maxX) / 2,
+          y: (bb.minY + bb.maxY) / 2,
+          z: (bb.minZ + bb.maxZ) / 2,
+        };
+
+        // Full bounding box (cyan wireframe)
+        const fullBoxGeo = new THREE.BoxGeometry(boxSize.x, boxSize.y, boxSize.z);
+        const fullBoxEdges = new THREE.EdgesGeometry(fullBoxGeo);
+        const fullBoxLine = new THREE.LineSegments(
+          fullBoxEdges,
+          new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4 })
+        );
+        fullBoxLine.position.set(boxCenter.x, boxCenter.y, boxCenter.z);
+
+        const symBoxGroup = new THREE.Group();
+        symBoxGroup.name = '__symmetry_box';
+        symBoxGroup.add(fullBoxLine);
+
+        // Symmetry divider lines based on symmetry type
+        const dividerColor = 0xff0044;
+        const addDivider = (points: THREE.Vector3[]) => {
+          const geo = new THREE.BufferGeometry().setFromPoints(points);
+          symBoxGroup.add(new THREE.Line(
+            geo,
+            new THREE.LineBasicMaterial({ color: dividerColor, transparent: true, opacity: 0.8 })
+          ));
+        };
+
+        if (state.symmetryType === 'bilateral') {
+          // Single divider at X=0
+          addDivider([
+            new THREE.Vector3(0, bb.minY, bb.minZ),
+            new THREE.Vector3(0, bb.maxY, bb.minZ),
+            new THREE.Vector3(0, bb.maxY, bb.maxZ),
+            new THREE.Vector3(0, bb.minY, bb.maxZ),
+            new THREE.Vector3(0, bb.minY, bb.minZ),
+          ]);
+        } else if (state.symmetryType === 'biradial') {
+          // Two dividers: X=0 and Y=0
+          addDivider([
+            new THREE.Vector3(0, bb.minY, bb.minZ),
+            new THREE.Vector3(0, bb.maxY, bb.minZ),
+            new THREE.Vector3(0, bb.maxY, bb.maxZ),
+            new THREE.Vector3(0, bb.minY, bb.maxZ),
+            new THREE.Vector3(0, bb.minY, bb.minZ),
+          ]);
+          addDivider([
+            new THREE.Vector3(bb.minX, 0, bb.minZ),
+            new THREE.Vector3(bb.maxX, 0, bb.minZ),
+            new THREE.Vector3(bb.maxX, 0, bb.maxZ),
+            new THREE.Vector3(bb.minX, 0, bb.maxZ),
+            new THREE.Vector3(bb.minX, 0, bb.minZ),
+          ]);
+        } else if (state.symmetryType === 'radial-5' || state.symmetryType === 'radial-3' || state.symmetryType === 'spherical') {
+          // Radial dividers from center axis (Z) at sector boundaries
+          const n = symmetryGroupSize(state.symmetryType);
+          const maxR = Math.max(boxSize.x, boxSize.y) / 2;
+          for (let k = 0; k < n; k++) {
+            const angle = (k / n) * Math.PI * 2;
+            const dx = Math.cos(angle) * maxR;
+            const dy = Math.sin(angle) * maxR;
+            addDivider([
+              new THREE.Vector3(boxCenter.x + dx, boxCenter.y + dy, bb.minZ),
+              new THREE.Vector3(boxCenter.x, boxCenter.y, bb.minZ),
+              new THREE.Vector3(boxCenter.x, boxCenter.y, bb.maxZ),
+              new THREE.Vector3(boxCenter.x + dx, boxCenter.y + dy, bb.maxZ),
+            ]);
+          }
+        }
+
+        shipGroup.add(symBoxGroup);
+      }
     }
   }, [state, updateMaterials, shipGroupRef, onUpdateOrganList]);
 
@@ -4010,7 +5183,9 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     (gridHelper.material as THREE.Material).opacity = 0.05;
     (gridHelper.material as THREE.Material).transparent = true;
     gridHelper.position.y = -6;
+    gridHelper.visible = state.showSystemDebug;
     scene.add(gridHelper);
+    gridHelperRef.current = gridHelper;
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
@@ -4201,12 +5376,40 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
     };
   }, []); // Mount once
 
+  // ── Scene-Level Toggle Visibility ──
+  // Lights, grid, particles, reticle, and overlays are created once in the
+  // scene-setup effect above. Their visibility is toggled here without
+  // rebuilding the entire scene.
+  useEffect(() => {
+    showDebugRef.current = state.showSystemDebug;
+    if (gridHelperRef.current) gridHelperRef.current.visible = state.showSystemDebug;
+    if (highlightGroupRef.current) {
+      // Reticle is also gated by targetNode selection in the render loop;
+      // only force-hide when debug is off.
+      if (!state.showSystemDebug) highlightGroupRef.current.visible = false;
+    }
+    if (sporeParticlesRef.current) sporeParticlesRef.current.visible = state.showSystemParticles;
+    if (particleSystemRef.current) particleSystemRef.current.visible = state.showSystemParticles;
+    if (rimLightRef.current) rimLightRef.current.visible = state.showSystemLighting;
+    if (coreLightRef.current) coreLightRef.current.visible = state.showSystemLighting;
+    // Toggle all lights in the scene
+    if (sceneRef.current) {
+      sceneRef.current.traverse((obj) => {
+        if ((obj as THREE.Light).isLight) obj.visible = state.showSystemLighting;
+      });
+    }
+    // Toggle section overlay bands
+    if (sectionOverlayRef.current) sectionOverlayRef.current.visible = state.showSystemOverlays;
+  }, [state.showSystemDebug, state.showSystemLighting, state.showSystemParticles, state.showSystemOverlays]);
+
   // Re-build ship when state parameters change
   useEffect(() => {
-    // Delay execution to allow the UI to paint the slider updates before blocking the thread
+    // Debounce rebuilds so rapid slider dragging coalesces into one build per
+    // interaction burst. 80ms is ~5 frames at 60fps — long enough to batch
+    // consecutive changes, short enough to feel responsive.
     const timer = setTimeout(() => {
       buildSpaceship();
-    }, 10);
+    }, 80);
     return () => clearTimeout(timer);
   }, [buildSpaceship]);
 
@@ -4305,9 +5508,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         });
 
         if (materialsRef.current.glowNode) {
-          let energyMultiplier = 1.0;
           const { status, ratio } = energyStatusRef.current;
-          if (status === 'SUB_OPTIMAL') energyMultiplier = 0.6;
+          let energyMultiplier = Math.min(1.0, Math.max(0.05, ratio));
           if (status === 'FAILING') energyMultiplier = 0.2 + Math.random() * 0.2; // Flickering
           if (status === 'OFFLINE') energyMultiplier = 0.05;
 
@@ -4316,10 +5518,8 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
         }
 
         if (materialsRef.current.vascularVein) {
-          let energyMultiplier = 1.0;
           const { status, ratio } = energyStatusRef.current;
-          if (status === 'SUB_OPTIMAL') energyMultiplier = 0.7;
-          if (status === 'FAILING') energyMultiplier = 0.3;
+          let energyMultiplier = Math.min(1.0, Math.max(0.0, ratio));
           if (status === 'OFFLINE') energyMultiplier = 0.0;
 
           (materialsRef.current.vascularVein as THREE.MeshStandardMaterial).emissiveIntensity =
@@ -4537,7 +5737,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
           const targetWorldPos = new THREE.Vector3();
           (foundMesh as THREE.Object3D).getWorldPosition(targetWorldPos);
 
-          highlightGroupRef.current.visible = true;
+          highlightGroupRef.current.visible = showDebugRef.current;
           highlightGroupRef.current.position.lerp(targetWorldPos, 0.2);
 
           if (cameraRef.current) {
@@ -4654,7 +5854,7 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
               let uMin = 0.05, uMax = 0.95;
               switch (organType) {
                 case 'eye':    uMin = 0.02; uMax = 0.15; break;
-                case 'neural': uMin = 0.03; uMax = 0.30; break;
+                case 'neural': uMin = 0.02; uMax = 0.98; break; // Full spine
                 case 'spiracle':
                 case 'rib':
                 case 'habitat':
@@ -4681,6 +5881,11 @@ export const Canvas3D: React.FC<Canvas3DProps> = ({
 
       // Live hull adaptation — skip re-projection to avoid feedback loop
       adaptHullRef.current(false);
+
+      // Re-apply command room hull deformation after live adaptation
+      if (deformHullForCommandRoomRef.current) {
+        deformHullForCommandRoomRef.current();
+      }
 
       // ── Regenerate blend bridges for the dragged organ ──
       // The hull SDF and organ-hull bridges must be rebuilt to stay attached

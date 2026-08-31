@@ -270,6 +270,23 @@ const NODE_DEFS: NodeDef[] = [
   },
 
   // ── Pipeline 3: Nervous & Cybernetic Synaptic System (§2.3) ──
+  //
+  // Anatomical placement (living-ship layout):
+  //
+  //   [Window/Front] → [Command Room] → [Back Wall] → [Hallway] → [rest of ship]
+  //                                                        ↑
+  //                                                     [Brain above]
+  //
+  // The brain sits posterior to the command room's back wall, above the
+  // connection hallway. The neuro-link pod is at the back wall — the pilot
+  // faces forward (toward the window), and the neuro-link is at the back of
+  // their head, interfacing with the biological brain behind the wall.
+  //
+  // The command room is at cranialU = 0.08 (Canvas3D.tsx command room block).
+  // The back wall is at cranialZ + roomSide/2. We approximate roomSide as
+  // hullRadius * 0.8 (the room fits inside the cranial hull, slightly smaller
+  // than the hull diameter). The brain is placed behind the back wall with
+  // clearance, in the Neck section (U ≈ 0.18–0.22).
   {
     id: NODE_IDS.BRAIN_CORE,
     name: 'Primary Ganglion Brain Core',
@@ -277,12 +294,21 @@ const NODE_DEFS: NodeDef[] = [
     role: 'GENERATION',
     anatomicalLayer: 'organs',
     positionFn: (ctx) => {
-      const z = ctx.headPos.z + 0.5;
+      const shipLength = ctx.tailPos.z - ctx.headPos.z;
+      const cranialU = 0.08; // matches Canvas3D.tsx command room placement
+      const cranialZ = ctx.headPos.z + cranialU * shipLength;
+      const hullR = ctx.sampleRadiusAtZ(cranialZ);
+      // Approximate back wall: cranialZ + roomSide/2
+      // roomSide ≈ hullR * 1.4 (maxRoomSide in Canvas3D.tsx), so half = hullR * 0.7
+      const backWallZ = cranialZ + hullR * 0.7;
+      // Brain sits behind the back wall, above the hallway
+      const z = backWallZ + 0.5; // clearance behind back wall
       const r = ctx.sampleRadiusAtZ(z);
       const sy = ctx.sampleSpineYAtZ(z);
-      return [0, sy + r * 0.25, z]; // anterior dorsal interior
+      // Dorsal offset: brain is above the hallway (which runs at spine level)
+      return [0, sy + r * 0.35, z]; // dorsal, above hallway
     },
-    downstreamNodeIds: [NODE_IDS.NEURO_LINK],
+    downstreamNodeIds: [NODE_IDS.NEURO_LINK, NODE_IDS.OCULAR_POD],
     telemetry: { efficiencyCoherence: '98.4% Synaptic Coherence' , baseEnergyCost: 80 },
   },
   {
@@ -292,10 +318,18 @@ const NODE_DEFS: NodeDef[] = [
     role: 'INTERFACE',
     anatomicalLayer: 'organs',
     positionFn: (ctx) => {
-      const z = ctx.headPos.z + 1.2;
+      const shipLength = ctx.tailPos.z - ctx.headPos.z;
+      const cranialU = 0.08;
+      const cranialZ = ctx.headPos.z + cranialU * shipLength;
+      const hullR = ctx.sampleRadiusAtZ(cranialZ);
+      // Neuro-link at the back wall of the command room
+      // (pilot sits facing the window, neuro-link is at the back of their head)
+      const backWallZ = cranialZ + hullR * 0.7;
+      const z = backWallZ;
       const r = ctx.sampleRadiusAtZ(z);
       const sy = ctx.sampleSpineYAtZ(z);
-      return [0, sy + r * 0.1, z]; // sub-cranial interior
+      // Slightly above spine — pilot head height when seated
+      return [0, sy + r * 0.15, z];
     },
     downstreamNodeIds: [NODE_IDS.AXON_CORD],
     telemetry: { efficiencyCoherence: 'Graphene Fiber Plug' , baseEnergyCost: 30 },
@@ -312,7 +346,7 @@ const NODE_DEFS: NodeDef[] = [
       const sy = ctx.sampleSpineYAtZ(z);
       return [0, sy + r * 0.15, z]; // just dorsal of spine center
     },
-    downstreamNodeIds: [NODE_IDS.OCULAR_POD, NODE_IDS.MUSCLE_TENDON],
+    downstreamNodeIds: [NODE_IDS.MUSCLE_TENDON],
     telemetry: { efficiencyCoherence: '120 m/s Nerve Impulse' , baseEnergyCost: 10 },
   },
   {
@@ -497,9 +531,19 @@ const CONDUIT_DEFS: ConduitDef[] = [
   { id: 'c_hemo_4', pipeline: 'HEMOLYMPH', sourceNodeId: NODE_IDS.FLANK_ARTERY, targetNodeId: NODE_IDS.SPIRACLE_VENT, conduitRadius: 0.25, fluidOrSignalType: 'Venous Return' },
 
   // Pipeline 3: Nervous
+  // c_nerv_1: Brain → Neuro-Link (graphene synapse thread)
+  // c_nerv_2: REMOVED — the explicit Spinal Axon Cord Highway TubeGeometry mesh
+  //   (Canvas3D.tsx) already runs from brain → neuro-link → full spine → tail,
+  //   so a duplicate conduit tube from neuro-link to mid-spine was redundant and
+  //   produced an unnecessary SDF blend bridge fillet at the axon_cord node.
+  // c_nerv_3: Optic nerve connects to the BRAIN (not the spinal cord) — eyes are
+  //   cranial organs and optic nerves route directly to the brain per anatomy.
+  //   If an eye is placed far from the brain, the nerve-branching system
+  //   (nerveBranching.ts) routes it through the nearest cranial ganglion instead.
+  // c_nerv_4: Motor nerve from spinal cord to muscles (anatomically correct —
+  //   motor nerves originate from the spinal cord, not the brain).
   { id: 'c_nerv_1', pipeline: 'NERVOUS', sourceNodeId: NODE_IDS.BRAIN_CORE, targetNodeId: NODE_IDS.NEURO_LINK, conduitRadius: 0.15, fluidOrSignalType: 'Graphene Synapse Thread' },
-  { id: 'c_nerv_2', pipeline: 'NERVOUS', sourceNodeId: NODE_IDS.NEURO_LINK, targetNodeId: NODE_IDS.AXON_CORD, conduitRadius: 0.18, fluidOrSignalType: 'Spinal Axon Cord' },
-  { id: 'c_nerv_3', pipeline: 'NERVOUS', sourceNodeId: NODE_IDS.AXON_CORD, targetNodeId: NODE_IDS.OCULAR_POD, conduitRadius: 0.12, fluidOrSignalType: 'Optic Nerve' },
+  { id: 'c_nerv_3', pipeline: 'NERVOUS', sourceNodeId: NODE_IDS.BRAIN_CORE, targetNodeId: NODE_IDS.OCULAR_POD, conduitRadius: 0.12, fluidOrSignalType: 'Optic Nerve' },
   { id: 'c_nerv_4', pipeline: 'NERVOUS', sourceNodeId: NODE_IDS.AXON_CORD, targetNodeId: NODE_IDS.MUSCLE_TENDON, conduitRadius: 0.1, fluidOrSignalType: 'Motor Nerve' },
 
   // Pipeline 4: Life Support

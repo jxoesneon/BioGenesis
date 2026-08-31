@@ -9,6 +9,7 @@ interface ActionFooterProps {
   onTakeSnapshot: () => void;
   mobilePanel: 'genetics' | 'telemetry' | 'none';
   setMobilePanel: (panel: 'genetics' | 'telemetry' | 'none') => void;
+  showSceneControls?: boolean;
 }
 
 export const ActionFooter: React.FC<ActionFooterProps> = React.memo(({
@@ -18,6 +19,7 @@ export const ActionFooter: React.FC<ActionFooterProps> = React.memo(({
   onTakeSnapshot,
   mobilePanel,
   setMobilePanel,
+  showSceneControls = true,
 }) => {
   return (
     <footer className="absolute bottom-4 lg:bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 pointer-events-auto w-[95%] lg:w-auto">
@@ -43,29 +45,31 @@ export const ActionFooter: React.FC<ActionFooterProps> = React.memo(({
         </button>
       </div>
 
-      {/* Main Action Buttons */}
-      <div className="flex items-center justify-center gap-2 w-full flex-wrap lg:flex-nowrap">
-        <button
-          onClick={onResetView}
-          className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-        >
-          <Video className="w-4 h-4 hidden sm:block" /> Reset
-        </button>
-        <button
-          onClick={onToggleAutoRotate}
-          className={`px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap ${
-            state.autoRotate ? 'bio-panel bio-panel-active text-cyan-400' : 'bio-panel text-cyan-400'
-          }`}
-        >
-          <RotateCw className={`w-4 h-4 hidden sm:block ${state.autoRotate ? 'animate-spin' : ''}`} /> Auto-Rotate
-        </button>
-        <button
-          onClick={onTakeSnapshot}
-          className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-        >
-          <Camera className="w-4 h-4 hidden sm:block" /> Snapshot
-        </button>
-      </div>
+      {/* Main Action Buttons (3D scene controls — hidden in engineering view) */}
+      {showSceneControls && (
+        <div className="flex items-center justify-center gap-2 w-full flex-wrap lg:flex-nowrap">
+          <button
+            onClick={onResetView}
+            className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+          >
+            <Video className="w-4 h-4 hidden sm:block" /> Reset
+          </button>
+          <button
+            onClick={onToggleAutoRotate}
+            className={`px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap ${
+              state.autoRotate ? 'bio-panel bio-panel-active text-cyan-400' : 'bio-panel text-cyan-400'
+            }`}
+          >
+            <RotateCw className={`w-4 h-4 hidden sm:block ${state.autoRotate ? 'animate-spin' : ''}`} /> Auto-Rotate
+          </button>
+          <button
+            onClick={onTakeSnapshot}
+            className="bio-panel hover:bio-panel-active text-cyan-200 px-3 py-2 rounded-lg text-xs font-mono flex items-center gap-2 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+          >
+            <Camera className="w-4 h-4 hidden sm:block" /> Snapshot
+          </button>
+        </div>
+      )}
     </footer>
   );
 });

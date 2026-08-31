@@ -421,6 +421,7 @@ export function estimateSDFBounds(
   const padding = maxRadius * 0.1;
   tightMin.subScalar(padding);
   tightMax.addScalar(padding);
+  releaseSDFGridBuffer(values);
   return new THREE.Box3(tightMin, tightMax);
 }
 

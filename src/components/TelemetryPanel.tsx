@@ -17,12 +17,65 @@ import {
   CheckCircle2,
   X,
   Waves,
+  Brain,
+  Users,
 } from 'lucide-react';
 import { AppState, TargetNodeInfo, ViewMode, AnatomyLayer, ShipSection, SHIP_SECTIONS } from '../types';
 import { LCG } from '../utils/nurbs';
 import { playScanChirp } from '../utils/audio';
 import { PIPELINE_NAMES } from '../utils/pipelineGraph';
 import { calculateEnergyGeneration, calculateEnergyConsumption, evaluateEnergyStatus, getOrganEnergyStatus } from '../utils/energy';
+import { computeEngineGeometry } from '../utils/propulsionSizing';
+
+// ── Neural compute telemetry helpers ──
+// EQ (encephalization quotient) follows Haller's rule + Jerison allometry.
+// Small ships carry proportionally larger brains and are metabolically strained;
+// large ships are autonomous but value human direction.
+// Reference: docs/research/NEURAL_COMPUTE_ARCHITECTURE.md
+const NEURAL_REFERENCE_VOLUME = 108.6;
+
+function computeShipVolume(length: number, thoraxWidth: number): number {
+  // Approximate hull volume as an ellipsoidal capsule: length × thoraxWidth² × π × 0.8
+  return length * thoraxWidth * thoraxWidth * Math.PI * 0.8;
+}
+
+function computeBrainEQ(length: number, thoraxWidth: number): number {
+  const shipVolume = computeShipVolume(length, thoraxWidth);
+  // EQ = clamp(7 × (referenceVolume / shipVolume)^(1/3), 3, 7)
+  const ratio = Math.pow(NEURAL_REFERENCE_VOLUME / Math.max(shipVolume, 1), 1 / 3);
+  return Math.min(7, Math.max(3, 7 * ratio));
+}
+
+function computeBrainEnergyPct(eq: number): number {
+  // Brain energy budget: 20% at EQ 7 (smallest) down to 8% at EQ 3 (largest).
+  // Linear interpolation: pct = 8 + (eq - 3) / (7 - 3) * (20 - 8)
+  return 8 + ((eq - 3) / 4) * 12;
+}
+
+function computeNeuralStatus(eq: number): 'Metabolically Strained' | 'Normal' | 'Underinvested' {
+  if (eq >= 6) return 'Metabolically Strained';
+  if (eq >= 4) return 'Normal';
+  return 'Underinvested';
+}
+
+// ── Crew complement helpers ──
+// Crew capacity scales on integers (1-5) based on ship length.
+// Reference: docs/research/COMMAND_ROOM_SPEC.md §2.1
+function crewCapacity(shipLength: number): number {
+  if (shipLength <= 7) return 1;
+  if (shipLength <= 12) return 2;
+  if (shipLength <= 17) return 3;
+  if (shipLength <= 25) return 4;
+  return 5;
+}
+
+const CREW_ROLES: string[] = [
+  'Commander',
+  'Helm',
+  'Bio-Systems Officer',
+  'Tactical',
+  'Science/Sensors',
+];
 
 interface TelemetryPanelProps {
   state: AppState;
@@ -69,6 +122,26 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = React.memo(({
   const energyGeneration = calculateEnergyGeneration(state);
   const energyConsumption = calculateEnergyConsumption(organList);
   const globalEnergyStatus = evaluateEnergyStatus(energyGeneration, energyConsumption);
+
+  // Dynamic propulsion metrics from allometric scaling model
+  const propulsionData = computeEngineGeometry(state, state.thoraxWidth * 0.5, energyGeneration, energyConsumption);
+  const shipMassKg = Math.round(propulsionData.shipMass);
+  const requiredThrustN = Math.round(propulsionData.requiredThrust);
+  const twr = propulsionData.twr.toFixed(3);
+  const cowlDiameter = (propulsionData.cowlRadius * 2).toFixed(1);
+  const plumeIntensityPct = Math.round(propulsionData.plumeIntensity * 100);
+
+  // Neural compute telemetry — brain EQ, energy budget, ganglion/nerve counts
+  const brainEQ = computeBrainEQ(state.length, state.thoraxWidth);
+  const brainEnergyPct = computeBrainEnergyPct(brainEQ);
+  const neuralStatus = computeNeuralStatus(brainEQ);
+  // Ganglion count tracks neural nodes (each node cluster hosts a ganglion)
+  const ganglionCount = state.neuralNodes;
+  // Nerve branches scale with ganglia and organ count (each ganglion branches to nearby organs)
+  const nerveBranchCount = state.neuralNodes * 2 + Math.round(state.habitatChambers * 1.5);
+
+  // Crew complement — scales 1-5 based on ship length
+  const crewCount = crewCapacity(state.length);
 
   const numCrossU = state.segments + 1;
   const numCrossV = 8;
@@ -188,6 +261,85 @@ export const TelemetryPanel: React.FC<TelemetryPanelProps> = React.memo(({
         <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
           <span className="text-[10px] text-cyan-400 block uppercase">Hydro-Pulse Thrust</span>
           <span className="text-sm font-mono font-bold text-cyan-300">{thrust} kN</span>
+        </div>
+        {/* Dynamic propulsion metrics — allometric scaling from ship mass & energy */}
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Ship Mass (Allometric)</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{shipMassKg.toLocaleString()} kg</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Req. Cruise Thrust</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{requiredThrustN.toLocaleString()} N</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Thrust-to-Weight</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{twr}</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Engine Cowl Ø</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{cowlDiameter} m</span>
+        </div>
+        <div className="bg-cyan-950/40 p-2 rounded border border-cyan-500/10">
+          <span className="text-[10px] text-cyan-400 block uppercase">Plume Output</span>
+          <span className="text-sm font-mono font-bold text-cyan-300">{plumeIntensityPct}%</span>
+        </div>
+      </div>
+
+      {/* Neural Compute Telemetry — brain EQ, energy budget, ganglion/nerve topology */}
+      <div className="bg-cyan-950/60 rounded-lg p-2.5 border border-cyan-500/20 space-y-1.5">
+        <span className="text-[10px] text-cyan-400 font-mono uppercase tracking-widest flex items-center gap-1">
+          <Brain className="w-3 h-3" /> Neural Compute
+        </span>
+        <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+          <div className="bg-cyan-950/40 p-1.5 rounded border border-cyan-500/10">
+            <span className="text-cyan-500 block uppercase text-[9px]">Brain EQ</span>
+            <span className="text-cyan-300 font-bold text-sm">{brainEQ.toFixed(2)}</span>
+          </div>
+          <div className="bg-cyan-950/40 p-1.5 rounded border border-cyan-500/10">
+            <span className="text-cyan-500 block uppercase text-[9px]">Brain Energy</span>
+            <span className="text-cyan-300 font-bold text-sm">{brainEnergyPct.toFixed(1)}%</span>
+          </div>
+          <div className="bg-cyan-950/40 p-1.5 rounded border border-cyan-500/10">
+            <span className="text-cyan-500 block uppercase text-[9px]">Ganglia</span>
+            <span className="text-cyan-300 font-bold text-sm">{ganglionCount}</span>
+          </div>
+          <div className="bg-cyan-950/40 p-1.5 rounded border border-cyan-500/10">
+            <span className="text-cyan-500 block uppercase text-[9px]">Nerve Branches</span>
+            <span className="text-cyan-300 font-bold text-sm">{nerveBranchCount}</span>
+          </div>
+        </div>
+        <div className="flex justify-between items-center text-[10px] font-mono pt-0.5">
+          <span className="text-cyan-500 uppercase text-[9px]">Neural Status:</span>
+          <span className={`font-bold ${
+            neuralStatus === 'Metabolically Strained' ? 'text-orange-400' :
+            neuralStatus === 'Normal' ? 'text-green-400' : 'text-yellow-400'
+          }`}>{neuralStatus}</span>
+        </div>
+      </div>
+
+      {/* Crew Complement — command room station roster (1-5 based on ship length) */}
+      <div className="bg-cyan-950/60 rounded-lg p-2.5 border border-cyan-500/20 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-cyan-400 font-mono uppercase tracking-widest flex items-center gap-1">
+            <Users className="w-3 h-3" /> Crew Complement
+          </span>
+          <span className="text-[10px] font-mono text-cyan-300 font-bold">{crewCount} / 5</span>
+        </div>
+        <div className="space-y-0.5">
+          {CREW_ROLES.map((role, idx) => {
+            const active = idx < crewCount;
+            return (
+              <div key={role} className="flex items-center justify-between text-[10px] font-mono">
+                <span className={`flex items-center gap-1.5 ${active ? 'text-cyan-300' : 'text-cyan-600/60'}`}>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-green-400' : 'bg-cyan-800'}`} style={active ? { boxShadow: '0 0 4px #4ade80' } : undefined} />
+                  {role}
+                </span>
+                <span className={`text-[9px] uppercase font-bold ${active ? 'text-green-400' : 'text-cyan-700'}`}>
+                  {active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

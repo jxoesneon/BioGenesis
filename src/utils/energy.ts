@@ -3,7 +3,15 @@ import { AppState, TargetNodeInfo } from '../types';
 export type EnergyStatus = 'OPTIMAL' | 'SUB_OPTIMAL' | 'FAILING' | 'OFFLINE';
 
 export function calculateEnergyGeneration(state: AppState): number {
-  return (state.length * 15 + state.habitatChambers * 12 + state.sporeSacs * 8) * (state.intakeType === 'baleen-ram' ? 1.5 : 1);
+  const INTAKE_MULTIPLIERS: Record<string, number> = {
+    'baleen-ram': 1.5,           // Leviathan — massive ram-scoop, highest passive intake
+    'crushing-mandibles': 1.2,   // Harvester — active ore crushing, moderate generation
+    'lamprey-siphon': 1.0,       // Frigate — parasitic siphon, baseline
+    'stealth-slit': 0.7,         // Interceptor — low-profile intake, sacrifices generation for stealth
+    'spore-filter': 1.1,         // Carrier — ambient spore filtration, steady low generation
+  };
+  const multiplier = INTAKE_MULTIPLIERS[state.intakeType] ?? 1.0;
+  return (state.length * 15 + state.habitatChambers * 12 + state.sporeSacs * 8) * multiplier;
 }
 
 export function calculateEnergyConsumption(nodes: TargetNodeInfo[]): number {

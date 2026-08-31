@@ -221,6 +221,75 @@ export const GeneticsDrawer: React.FC<GeneticsDrawerProps> = React.memo(({
         })}
       </div>
 
+      {/* Biological System Debug Visibility */}
+      <div className="space-y-2 bg-amber-950/20 p-3 rounded-lg border border-amber-500/20">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
+            <FlaskConical className="w-3.5 h-3.5 mr-1" /> System Debug Visibility
+          </h3>
+          <button
+            onClick={() => {
+              const systemKeys = [
+                'showSystemHull', 'showSystemSkeletal', 'showSystemMuscular', 'showSystemVascular',
+                'showSystemNeural', 'showSystemNeuralVentral', 'showNerveBranches',
+                'showSystemRespiratory', 'showSystemCirculatory', 'showSystemBioPlasma',
+                'showSystemPropulsion', 'showSystemLifeSupport', 'showCommandRoom',
+                'showSystemArmorDefense', 'showSystemSurfaceOrgans',
+                'showSystemAppendages', 'showSystemLighting', 'showSystemParticles', 'showSystemOverlays', 'showSystemDebug',
+              ] as const;
+              const allVisible = systemKeys.every((k) => state[k]);
+              const updates = Object.fromEntries(systemKeys.map((k) => [k, !allVisible]));
+              onUpdateState(updates as Partial<AppState>);
+            }}
+            className="px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-all bio-panel text-amber-400 hover:text-amber-300"
+          >
+            <Eye className="w-3 h-3" /> Show/Hide All
+          </button>
+        </div>
+        {([
+          { field: 'showSystemHull' as const,          label: 'Hull (Carapace Surface)',       icon: 'bone' },
+          { field: 'showSystemSkeletal' as const,      label: 'Skeletal (Vertebrae + Plates)', icon: 'bone' },
+          { field: 'showSystemMuscular' as const,      label: 'Muscular (Tendon Fibers)',      icon: 'activity' },
+          { field: 'showSystemVascular' as const,      label: 'Vascular (Arteries + Veins)',   icon: 'activity' },
+          { field: 'showSystemNeural' as const,        label: 'Neural (Brain + Cord)',         icon: 'activity' },
+          { field: 'showSystemNeuralVentral' as const, label: 'Neural Ventral (VNC Chain)',    icon: 'activity' },
+          { field: 'showNerveBranches' as const,       label: 'Nerve Branches (Ganglion→Organ)', icon: 'activity' },
+          { field: 'showSystemRespiratory' as const,   label: 'Respiratory (Spiracles)',       icon: 'activity' },
+          { field: 'showSystemCirculatory' as const,   label: 'Circulatory (Heart)',           icon: 'activity' },
+          { field: 'showSystemBioPlasma' as const,     label: 'Bio-Plasma (Glands + Trunk)',   icon: 'activity' },
+          { field: 'showSystemPropulsion' as const,    label: 'Propulsion (Cowl + Nozzles)',   icon: 'activity' },
+          { field: 'showSystemLifeSupport' as const,   label: 'Life Support (Intake + Hab)',   icon: 'activity' },
+          { field: 'showCommandRoom' as const,         label: 'Command Room (Bridge + Crew)',  icon: 'bone' },
+          { field: 'showSystemArmorDefense' as const,  label: 'Armor Defense (Shields)',       icon: 'activity' },
+          { field: 'showSystemSurfaceOrgans' as const, label: 'Surface (Ribs + Eyes + Spores)',icon: 'activity' },
+          { field: 'showSystemAppendages' as const,    label: 'Appendages (Fins + Limbs)',     icon: 'activity' },
+          { field: 'showSystemLighting' as const,      label: 'Lighting (Scene Lights)',       icon: 'activity' },
+          { field: 'showSystemParticles' as const,     label: 'Particles (Spores + Thrust)',   icon: 'activity' },
+          { field: 'showSystemOverlays' as const,      label: 'Overlays (Section Bands)',      icon: 'activity' },
+          { field: 'showSystemDebug' as const,         label: 'Debug (Grid + Sym Box)',        icon: 'activity' },
+        ]).map(({ field, label, icon }) => {
+          const visible = state[field];
+          return (
+            <div key={field} className="flex items-center justify-between text-xs">
+              <span className="text-amber-300 font-mono flex items-center gap-1.5">
+                {icon === 'bone' && <Bone className="w-3 h-3 shrink-0" />}
+                {icon === 'activity' && <Activity className="w-3 h-3 shrink-0" />}
+                {label}
+              </span>
+              <button
+                onClick={() => onUpdateState({ [field]: !visible } as Partial<AppState>)}
+                className={`px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer transition-all ${
+                  visible ? 'bio-panel bio-panel-active text-amber-300' : 'bio-panel text-amber-400'
+                }`}
+              >
+                {visible ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
+                {visible ? 'VISIBLE' : 'HIDDEN'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Spine & Hull Morphing */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-cyan-300 uppercase tracking-widest flex items-center justify-between">

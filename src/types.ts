@@ -86,6 +86,33 @@ export interface AppState {
   showConduitLifeSupport: boolean;
   showConduitArmorDefense: boolean;
 
+  // ── Biological System Debug Visibility ──
+  // Individual toggles for each biological system's meshes. When off, that
+  // system's organs, conduits, and appendages are not rendered. Used for
+  // debugging symmetry, placement, and anatomical relationships per-system.
+  showSystemHull: boolean;          // Main carapace NURBS surface mesh
+  showSystemSkeletal: boolean;      // Vertebrae + chitin carapace plates
+  showSystemVascular: boolean;      // Arteries, veins, aorta, vascular networks
+  showSystemNeural: boolean;        // Brain, spinal cord, ganglia, neuro-link
+  showSystemRespiratory: boolean;   // Spiracle gill vents
+  showSystemCirculatory: boolean;   // Heart, hemolymph atrium
+  showSystemBioPlasma: boolean;     // Plasma gland, bladder, trunk, disruptors
+  showSystemLifeSupport: boolean;   // Intake maw, moss bed, habitats, stomata, hallways
+  showSystemArmorDefense: boolean;  // Shield emitters, coagulation bed, caudal manifold
+  showSystemSurfaceOrgans: boolean; // Ribs, eyes, spores, tentacles
+  showSystemAppendages: boolean;    // Fins, flukes, landing limbs, dorsal sail
+  showSystemPropulsion: boolean;    // Engine cowl, thruster nozzles, exhaust plumes
+  showSystemMuscular: boolean;      // Biomechanical muscle tendon fibers
+  showSystemLighting: boolean;      // Scene lights (key, fill, under, rim, core, hemi)
+  showSystemParticles: boolean;     // Ambient spore + thruster particle systems
+  showSystemOverlays: boolean;      // Anatomical section overlay bands
+  showSystemDebug: boolean;         // Grid helper, symmetry bounding box, target reticle
+
+  // ── Neural Compute Architecture toggles ──
+  showSystemNeuralVentral: boolean; // Ventral nerve chain toggle (second cord at v=0.75)
+  showCommandRoom: boolean;         // Command room toggle (pilot interface chamber)
+  showNerveBranches: boolean;       // Nerve branch visibility toggle (ganglia -> organs)
+
   // Disruptor firing trigger
   fireDisruptors: number; // increment to trigger a firing event
 
