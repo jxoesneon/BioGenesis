@@ -5,8 +5,8 @@
 **Audit Lead**: Red-Team Auditor 4 (Netcode & Concurrency Adversary) · BioGenesis Hole-Poker Swarm  
 **Orchestration**: Ciel Orchestration Layer  
 **Status**: Completed / Actionable Technical Remediation Standard  
-**Target File**: [`file:///Users/mey/BioGenesis/docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md`](file:///Users/mey/BioGenesis/docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md)  
-**Target Specification Audited**: [`AAA_NETCODE_AND_MULTIPLAYER_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_NETCODE_AND_MULTIPLAYER_SPEC.md) (`BIO-NET-SPEC-2026-V1`)
+**Target File**: [`docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md`](./AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md)  
+**Target Specification Audited**: [`AAA_NETCODE_AND_MULTIPLAYER_SPEC.md`](./AAA_NETCODE_AND_MULTIPLAYER_SPEC.md) (`BIO-NET-SPEC-2026-V1`)
 
 ---
 
@@ -507,4 +507,4 @@ To ensure all netcode patches maintain strict type safety and engine compatibili
 > **Audit Sign-off**:  
 > Red-Team Auditor 4 (Netcode & Concurrency Adversary)  
 > BioGenesis Hole-Poker Swarm · Ciel Orchestration Layer  
-> *Report written to [`/Users/mey/BioGenesis/docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md`](file:///Users/mey/BioGenesis/docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md)*
+> *Report written to [`docs/institutional/AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md`](./AUDIT_NETCODE_AND_CONCURRENCY_HOLES.md)*

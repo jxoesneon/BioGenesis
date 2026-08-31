@@ -104,10 +104,10 @@ Players balance 5 continuous internal organ pipelines:
 
 | Gameplay Pillar | Core Technical Engine Module | Primary Specification File |
 | :--- | :--- | :--- |
-| **1. Exploration** | Procedural World Engine & Keplar Solver | [`AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md) |
-| **2. Resource Management** | Closed-Loop Pipeline Engine & Neural Compute | [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_GAMEPLAY_SYSTEMS_DESIGN.md) |
-| **3. Dual-Layer Combat** | Soft-Body Physics (XPBD) & Rollback Netcode | [`AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md) |
-| **4. Crafting & Splicing** | SDF Blending & Chromosome Mutation Pipeline | [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) |
+| **1. Exploration** | Procedural World Engine & Keplar Solver | [`AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md`](./AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md) |
+| **2. Resource Management** | Closed-Loop Pipeline Engine & Neural Compute | [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](./AAA_GAMEPLAY_SYSTEMS_DESIGN.md) |
+| **3. Dual-Layer Combat** | Soft-Body Physics (XPBD) & Rollback Netcode | [`AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md`](./AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md) |
+| **4. Crafting & Splicing** | SDF Blending & Chromosome Mutation Pipeline | [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](./PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) |
 
 ---
 *Ratified by Ciel Council of Five — BioGenesis Institutional Specification Suite 2026.*

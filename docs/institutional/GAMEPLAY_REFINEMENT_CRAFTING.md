@@ -619,7 +619,7 @@ flowchart TD
 To verify that the crafting, genetics, Hadamard matrix computations, organ filleting rules, and bio-splicing data models compile cleanly without type errors or broken imports, run the static gate check from the BioGenesis root:
 
 ```bash
-cd /Users/mey/BioGenesis
+cd BioGenesis
 npx tsc --noEmit
 npm run build
 ```

@@ -2,11 +2,11 @@
 
 > **Document Identifier**: `BIO-QA-SPEC-2026-V1`  
 > **Document Class**: Institutional Engineering Specification  
-> **Target File Path**: `file:///Users/mey/BioGenesis/docs/institutional/AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md`  
+> **Target File Path**: `docs/institutional/AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md`  
 > **Author**: Subagent J (QA Automation, Telemetry & Audit Master Lead) — AAA+ Swarm Loop 2  
 > **Runtime Environment**: TypeScript · React 19 · Vite 6 · Three.js (WebGL2) · WebGPU WGSL · Express · Playwright  
 > **Status**: APPROVED INSTITUTIONAL SPECIFICATION  
-> **Companion Base Specs**: [`PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md`](file:///Users/mey/BioGenesis/docs/research/PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md) · [`TECHNICAL_ARCHITECTURE_AND_ROADMAP.md`](file:///Users/mey/BioGenesis/docs/institutional/TECHNICAL_ARCHITECTURE_AND_ROADMAP.md) · [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) · [`COUNCIL_AUDIT_REPORT.md`](file:///Users/mey/BioGenesis/docs/institutional/COUNCIL_AUDIT_REPORT.md)
+> **Companion Base Specs**: [`PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md`](../research/PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md) · [`TECHNICAL_ARCHITECTURE_AND_ROADMAP.md`](./TECHNICAL_ARCHITECTURE_AND_ROADMAP.md) · [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](./PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) · [`COUNCIL_AUDIT_REPORT.md`](./COUNCIL_AUDIT_REPORT.md)
 
 ---
 

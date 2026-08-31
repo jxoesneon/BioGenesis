@@ -4,25 +4,25 @@
 > **Classification**: Formal Institutional Governance & Technical Audit  
 > **Status**: Approved / Unanimous Council Ratification  
 > **Audit Lead**: Subagent 5 & Subagent J (Audit & Validation Masters) — BioGenesis Double Agentic Loop  
-> **Target Path**: `file:///Users/mey/BioGenesis/docs/institutional/COUNCIL_AUDIT_REPORT.md`  
+> **Target Path**: `docs/institutional/COUNCIL_AUDIT_REPORT.md`  
 > **Audited Institutional Specifications (13 Engineering Specs + Master Index + Audit Report = 15 Total Documents)**:
-> 1. [`UNIVERSE_AND_FACTIONS_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/UNIVERSE_AND_FACTIONS_SPEC.md) (`BIO-SPEC-2026-V1`)
-> 2. [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_GAMEPLAY_SYSTEMS_DESIGN.md) (`BIO-SYS-SPEC-2026-V1`)
-> 3. [`TECHNICAL_ARCHITECTURE_AND_ROADMAP.md`](file:///Users/mey/BioGenesis/docs/institutional/TECHNICAL_ARCHITECTURE_AND_ROADMAP.md) (`BIO-ENG-SPEC-2026-V1`)
-> 4. [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) (`SPEC-BIO-2026-SDF04`)
-> 5. [`AAA_GRAPHICS_AND_SHADERS_ENGINE_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_GRAPHICS_AND_SHADERS_ENGINE_SPEC.md) (`BIO-GFX-SPEC-2026-V1`)
-> 6. [`AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md) (`BIO-PHYS-SPEC-2026-V1`)
-> 7. [`AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md) (`BIO-WORLD-SPEC-2026-V1`)
-> 8. [`AAA_NEURAL_AI_AND_SWARM_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_NEURAL_AI_AND_SWARM_SPEC.md) (`BIO-AI-SPEC-2026-V1`)
-> 9. [`AAA_NETCODE_AND_MULTIPLAYER_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_NETCODE_AND_MULTIPLAYER_SPEC.md) (`BIO-NET-SPEC-2026-V1`)
-> 10. [`AAA_SPATIAL_AUDIO_AND_ACOUSTICS_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_SPATIAL_AUDIO_AND_ACOUSTICS_SPEC.md) (`BIO-AUDIO-SPEC-2026-V1`)
-> 11. [`AAA_LOCOMOTION_AND_ANIMATION_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_LOCOMOTION_AND_ANIMATION_SPEC.md) (`BIO-ANIM-SPEC-2026-V1`)
-> 12. [`AAA_MEMORY_STREAMING_AND_ASSET_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_MEMORY_STREAMING_AND_ASSET_SPEC.md) (`BIO-MEM-SPEC-2026-V1`)
-> 13. [`AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md) (`BIO-QA-SPEC-2026-V1`)
-> 14. [`COUNCIL_AUDIT_REPORT.md`](file:///Users/mey/BioGenesis/docs/institutional/COUNCIL_AUDIT_REPORT.md) (`BIO-AUDIT-COUNCIL-2026-V1`)
-> 15. [`README.md`](file:///Users/mey/BioGenesis/docs/institutional/README.md) (`BIO-MASTER-INDEX-2026-V1`)
+> 1. [`UNIVERSE_AND_FACTIONS_SPEC.md`](./UNIVERSE_AND_FACTIONS_SPEC.md) (`BIO-SPEC-2026-V1`)
+> 2. [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](./AAA_GAMEPLAY_SYSTEMS_DESIGN.md) (`BIO-SYS-SPEC-2026-V1`)
+> 3. [`TECHNICAL_ARCHITECTURE_AND_ROADMAP.md`](./TECHNICAL_ARCHITECTURE_AND_ROADMAP.md) (`BIO-ENG-SPEC-2026-V1`)
+> 4. [`PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md`](./PROCEDURAL_ORGAN_GENETICS_AND_SDF_SPEC.md) (`SPEC-BIO-2026-SDF04`)
+> 5. [`AAA_GRAPHICS_AND_SHADERS_ENGINE_SPEC.md`](./AAA_GRAPHICS_AND_SHADERS_ENGINE_SPEC.md) (`BIO-GFX-SPEC-2026-V1`)
+> 6. [`AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md`](./AAA_PHYSICS_AND_TISSUE_DEFORMATION_SPEC.md) (`BIO-PHYS-SPEC-2026-V1`)
+> 7. [`AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md`](./AAA_PROCEDURAL_WORLD_AND_BIOMES_SPEC.md) (`BIO-WORLD-SPEC-2026-V1`)
+> 8. [`AAA_NEURAL_AI_AND_SWARM_SPEC.md`](./AAA_NEURAL_AI_AND_SWARM_SPEC.md) (`BIO-AI-SPEC-2026-V1`)
+> 9. [`AAA_NETCODE_AND_MULTIPLAYER_SPEC.md`](./AAA_NETCODE_AND_MULTIPLAYER_SPEC.md) (`BIO-NET-SPEC-2026-V1`)
+> 10. [`AAA_SPATIAL_AUDIO_AND_ACOUSTICS_SPEC.md`](./AAA_SPATIAL_AUDIO_AND_ACOUSTICS_SPEC.md) (`BIO-AUDIO-SPEC-2026-V1`)
+> 11. [`AAA_LOCOMOTION_AND_ANIMATION_SPEC.md`](./AAA_LOCOMOTION_AND_ANIMATION_SPEC.md) (`BIO-ANIM-SPEC-2026-V1`)
+> 12. [`AAA_MEMORY_STREAMING_AND_ASSET_SPEC.md`](./AAA_MEMORY_STREAMING_AND_ASSET_SPEC.md) (`BIO-MEM-SPEC-2026-V1`)
+> 13. [`AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md`](./AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md) (`BIO-QA-SPEC-2026-V1`)
+> 14. [`COUNCIL_AUDIT_REPORT.md`](./COUNCIL_AUDIT_REPORT.md) (`BIO-AUDIT-COUNCIL-2026-V1`)
+> 15. [`README.md`](./README.md) (`BIO-MASTER-INDEX-2026-V1`)
 > 
-> **Companion Base Specs**: [`LORE.md`](file:///Users/mey/BioGenesis/LORE.md) · [`ORGAN_SYSTEMS.md`](file:///Users/mey/BioGenesis/ORGAN_SYSTEMS.md) · [`AGENTS.md`](file:///Users/mey/BioGenesis/AGENTS.md) · [`LIVING_SHIPS_RESEARCH.md`](file:///Users/mey/BioGenesis/docs/research/LIVING_SHIPS_RESEARCH.md) · [`NEURAL_COMPUTE_ARCHITECTURE.md`](file:///Users/mey/BioGenesis/docs/research/NEURAL_COMPUTE_ARCHITECTURE.md) · [`COMMAND_ROOM_SPEC.md`](file:///Users/mey/BioGenesis/docs/research/COMMAND_ROOM_SPEC.md) · [`PROCEDURAL_MESH_GENERATION_RESEARCH.md`](file:///Users/mey/BioGenesis/docs/research/PROCEDURAL_MESH_GENERATION_RESEARCH.md) · [`PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md`](file:///Users/mey/BioGenesis/docs/research/PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md)
+> **Companion Base Specs**: [`LORE.md`](../../LORE.md) · [`ORGAN_SYSTEMS.md`](../../ORGAN_SYSTEMS.md) · [`AGENTS.md`](../../AGENTS.md) · [`LIVING_SHIPS_RESEARCH.md`](../research/LIVING_SHIPS_RESEARCH.md) · [`NEURAL_COMPUTE_ARCHITECTURE.md`](../research/NEURAL_COMPUTE_ARCHITECTURE.md) · [`COMMAND_ROOM_SPEC.md`](../research/COMMAND_ROOM_SPEC.md) · [`PROCEDURAL_MESH_GENERATION_RESEARCH.md`](../research/PROCEDURAL_MESH_GENERATION_RESEARCH.md) · [`PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md`](../research/PROFILING_AND_QA_AUTOMATION_ARCHITECTURE.md)
 
 ---
 
@@ -155,7 +155,7 @@ The procedural biology framework defines a robust genotype-to-phenotype mapping 
 The static type check command was executed in the project root:
 
 ```bash
-cd /Users/mey/BioGenesis
+cd BioGenesis
 npx tsc --noEmit
 ```
 

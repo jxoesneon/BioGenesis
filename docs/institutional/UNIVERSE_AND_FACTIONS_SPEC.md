@@ -3,8 +3,8 @@
 > **Document Class**: Institutional Technical & Lore Specification  
 > **Document Identifier**: `BIO-SPEC-2026-V1`  
 > **Status**: Authoritative Canon  
-> **Target Path**: `file:///Users/mey/BioGenesis/docs/institutional/UNIVERSE_AND_FACTIONS_SPEC.md`  
-> **Companion Documents**: [`LORE.md`](file:///Users/mey/BioGenesis/LORE.md), [`ORGAN_SYSTEMS.md`](file:///Users/mey/BioGenesis/ORGAN_SYSTEMS.md), [`LIVING_SHIPS_RESEARCH.md`](file:///Users/mey/BioGenesis/docs/research/LIVING_SHIPS_RESEARCH.md)
+> **Target Path**: `docs/institutional/UNIVERSE_AND_FACTIONS_SPEC.md`  
+> **Companion Documents**: [`LORE.md`](../../LORE.md), [`ORGAN_SYSTEMS.md`](../../ORGAN_SYSTEMS.md), [`LIVING_SHIPS_RESEARCH.md`](../research/LIVING_SHIPS_RESEARCH.md)
 
 ---
 

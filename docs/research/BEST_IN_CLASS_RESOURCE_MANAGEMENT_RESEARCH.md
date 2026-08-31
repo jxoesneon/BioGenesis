@@ -795,4 +795,4 @@ This comprehensive research specification provides an mathematically rigorous, b
 
 ---
 
-> *Spec written and verified for BioGenesis root at `/Users/mey/BioGenesis/docs/research/BEST_IN_CLASS_RESOURCE_MANAGEMENT_RESEARCH.md`.*
+> *Spec written and verified for BioGenesis root at `docs/research/BEST_IN_CLASS_RESOURCE_MANAGEMENT_RESEARCH.md`.*

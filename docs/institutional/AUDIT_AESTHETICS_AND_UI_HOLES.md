@@ -1,6 +1,6 @@
 # Red-Team Hole-Poker Audit Report: Aesthetics, Spatial UI/UX, Shaders & Accessibility
 **Document Reference**: `BIO-AUDIT-2026-UIUX-005`  
-**Target File**: `/Users/mey/BioGenesis/docs/institutional/AUDIT_AESTHETICS_AND_UI_HOLES.md`  
+**Target File**: `docs/institutional/AUDIT_AESTHETICS_AND_UI_HOLES.md`  
 **Auditor**: Red-Team Auditor 5 (Lore, Aesthetics & UI/UX Adversary)  
 **Status**: Critical Flaws Identified — Architectural Remediation Required  
 

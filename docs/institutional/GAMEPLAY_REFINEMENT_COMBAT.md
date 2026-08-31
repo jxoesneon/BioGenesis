@@ -3,7 +3,7 @@
 > **Engine Target**: GENESIS-X Living Ship Engine (Three.js / React 19 / Vite 6 / WebGPU)  
 > **Classification**: Gameplay Combat Mechanics & Refinement Architecture  
 > **Author**: Subagent 3 (Combat Mechanics Refinement Lead)  
-> **Cross-References**: [`LORE.md`](file:///Users/mey/BioGenesis/LORE.md) · [`ORGAN_SYSTEMS.md`](file:///Users/mey/BioGenesis/ORGAN_SYSTEMS.md) · [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](file:///Users/mey/BioGenesis/docs/institutional/AAA_GAMEPLAY_SYSTEMS_DESIGN.md) · [`BEST_IN_CLASS_COMBAT_RESEARCH.md`](file:///Users/mey/BioGenesis/docs/research/BEST_IN_CLASS_COMBAT_RESEARCH.md) · [`NEURAL_COMPUTE_ARCHITECTURE.md`](file:///Users/mey/BioGenesis/docs/research/NEURAL_COMPUTE_ARCHITECTURE.md) · [`COMMAND_ROOM_SPEC.md`](file:///Users/mey/BioGenesis/docs/research/COMMAND_ROOM_SPEC.md)
+> **Cross-References**: [`LORE.md`](../../LORE.md) · [`ORGAN_SYSTEMS.md`](../../ORGAN_SYSTEMS.md) · [`AAA_GAMEPLAY_SYSTEMS_DESIGN.md`](./AAA_GAMEPLAY_SYSTEMS_DESIGN.md) · [`BEST_IN_CLASS_COMBAT_RESEARCH.md`](../research/BEST_IN_CLASS_COMBAT_RESEARCH.md) · [`NEURAL_COMPUTE_ARCHITECTURE.md`](../research/NEURAL_COMPUTE_ARCHITECTURE.md) · [`COMMAND_ROOM_SPEC.md`](../research/COMMAND_ROOM_SPEC.md)
 
 ---
 

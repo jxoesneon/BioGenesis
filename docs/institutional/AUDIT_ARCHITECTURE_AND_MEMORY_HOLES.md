@@ -1,7 +1,7 @@
 # Red-Team Audit Report: BioGenesis Architecture & Memory Holes
 **Document Identifier**: `BIO-AUDIT-ARCH-MEM-2026-V1`  
 **Auditor**: Red-Team Auditor 3 (Architecture & Memory Adversary)  
-**Target Repository**: `BioGenesis` (`/Users/mey/BioGenesis`)  
+**Target Repository**: `BioGenesis` (`BioGenesis`)  
 **Context Sentinel Beacon**: `«Report» Master,`  
 **Date**: August 13, 2026  
 
@@ -17,14 +17,14 @@ While BioGenesis possesses an advanced mathematical specification and rich proce
 
 | Vulnerability Category | Severity | Primary Location | Root Cause | Impact |
 | :--- | :--- | :--- | :--- | :--- |
-| **VRAM Memory Leakage** | **CRITICAL** | [`Canvas3D.tsx:342-344`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L342-L344) | Child removal without `geometry.dispose()`, `material.dispose()`, or `texture.dispose()` | WebGL VRAM leaks ~15–50 MB per slider drag, causing GPU out-of-memory crashes |
-| **Material & Texture Orphans** | **HIGH** | [`Canvas3D.tsx:184-318`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L184-L318), [`reactionDiffusion.ts:251-281`](file:///Users/mey/BioGenesis/src/utils/reactionDiffusion.ts#L251-L281) | Re-instantiating 20+ materials & DataTextures on state changes without disposing old handles | Compiled GLSL shader programs and texture units accumulate infinitely in GPU memory |
+| **VRAM Memory Leakage** | **CRITICAL** | [`Canvas3D.tsx:342-344`](../../src/components/Canvas3D.tsx#L342-L344) | Child removal without `geometry.dispose()`, `material.dispose()`, or `texture.dispose()` | WebGL VRAM leaks ~15–50 MB per slider drag, causing GPU out-of-memory crashes |
+| **Material & Texture Orphans** | **HIGH** | [`Canvas3D.tsx:184-318`](../../src/components/Canvas3D.tsx#L184-L318), [`reactionDiffusion.ts:251-281`](../../src/utils/reactionDiffusion.ts#L251-L281) | Re-instantiating 20+ materials & DataTextures on state changes without disposing old handles | Compiled GLSL shader programs and texture units accumulate infinitely in GPU memory |
 | **Missing `VRAMLeakAuditor`** | **HIGH** | `src/utils/` | Telemetry spec specifies real-time `renderer.info` tracking, but implementation is absent | Leaks occur silently without developer or automated QA detection |
-| **`TransformControls` Leaks** | **MEDIUM** | [`Canvas3D.tsx:334-338`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L334-L338), [`Canvas3D.tsx:5812-5968`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5812-L5968) | Detaching gizmo without disposing instance; three.js r185+ property path mismatch | Console spam (`"attached 3D object must be part of scene graph"`), leaked event listeners |
-| **V8 GC Frame Hitches** | **HIGH** | [`marchingCubes.ts:378-445`](file:///Users/mey/BioGenesis/src/utils/marchingCubes.ts#L378-L445) | `positions.push()` / `indices.push()` in $48^3$ grid loops; missing `SlabMemoryPool` | 15–45ms V8 GC pauses during parameter tweaks, breaching 60 FPS ($16.67\text{ ms}$) budget |
-| **Unbounded Grid Pool** | **MEDIUM** | [`sdf.ts:312-334`](file:///Users/mey/BioGenesis/src/utils/sdf.ts#L312-L334) | `sdfGridPool` caps entries per size at 100 without total memory ceiling or LRU eviction | Uncollected TypedArrays consume > 100 MB RAM |
+| **`TransformControls` Leaks** | **MEDIUM** | [`Canvas3D.tsx:334-338`](../../src/components/Canvas3D.tsx#L334-L338), [`Canvas3D.tsx:5812-5968`](../../src/components/Canvas3D.tsx#L5812-L5968) | Detaching gizmo without disposing instance; three.js r185+ property path mismatch | Console spam (`"attached 3D object must be part of scene graph"`), leaked event listeners |
+| **V8 GC Frame Hitches** | **HIGH** | [`marchingCubes.ts:378-445`](../../src/utils/marchingCubes.ts#L378-L445) | `positions.push()` / `indices.push()` in $48^3$ grid loops; missing `SlabMemoryPool` | 15–45ms V8 GC pauses during parameter tweaks, breaching 60 FPS ($16.67\text{ ms}$) budget |
+| **Unbounded Grid Pool** | **MEDIUM** | [`sdf.ts:312-334`](../../src/utils/sdf.ts#L312-L334) | `sdfGridPool` caps entries per size at 100 without total memory ceiling or LRU eviction | Uncollected TypedArrays consume > 100 MB RAM |
 | **Main-Thread Blocking** | **CRITICAL** | `src/components/Canvas3D.tsx` | Web Worker offloading (`sdfWorker.ts`) is 100% missing from `src/`; heavy SDF/MC runs synchronously | 100–400ms UI freezes on genetics mutation |
-| **TypeScript Type Loopholes** | **MEDIUM** | [`Canvas3D.tsx:5820`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5820), [`types.ts`](file:///Users/mey/BioGenesis/src/types.ts), [`nerveBranching.ts:85`](file:///Users/mey/BioGenesis/src/utils/nerveBranching.ts#L85) | Widespread `any` casts (`event: any`, `o: any`, `extra?: any`) and non-null assertions | Silent runtime failures, undefined property access, lost type safety guarantees |
+| **TypeScript Type Loopholes** | **MEDIUM** | [`Canvas3D.tsx:5820`](../../src/components/Canvas3D.tsx#L5820), [`types.ts`](../../src/types.ts), [`nerveBranching.ts:85`](../../src/utils/nerveBranching.ts#L85) | Widespread `any` casts (`event: any`, `o: any`, `extra?: any`) and non-null assertions | Silent runtime failures, undefined property access, lost type safety guarantees |
 
 ---
 
@@ -33,7 +33,7 @@ While BioGenesis possesses an advanced mathematical specification and rich proce
 ### 1.1 Hole Identification & Code Interrogation
 
 #### A. Scene Child Clearance Without Deallocation
-In [`Canvas3D.tsx:342-344`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L342-L344), ship rebuilds execute the following child clearance loop:
+In [`Canvas3D.tsx:342-344`](../../src/components/Canvas3D.tsx#L342-L344), ship rebuilds execute the following child clearance loop:
 
 ```typescript
 // Canvas3D.tsx (Current Implementation - Lines 342-344)
@@ -51,17 +51,17 @@ Each organ mesh, hull segment, vascular feed tube, Catmull-Clark subdivided mesh
 Calling `shipGroup.remove()` leaves these WebGLBuffer and WebGLProgram handles allocated inside the WebGL context. Every parameter adjustment in `GeneticsDrawer` triggers `buildSpaceship()`, leaking hundreds of GPU buffers into VRAM.
 
 #### B. Material and DataTexture Overwrites
-In [`Canvas3D.tsx:184-318`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L184-L318), `updateMaterials()` instantiates 20+ materials on every call:
+In [`Canvas3D.tsx:184-318`](../../src/components/Canvas3D.tsx#L184-L318), `updateMaterials()` instantiates 20+ materials on every call:
 
 ```typescript
 // Canvas3D.tsx (Current Implementation - Line 318)
 materialsRef.current = mats;
 ```
 
-The old material object references in `materialsRef.current` are overwritten without calling `oldMat.dispose()`. Furthermore, in [`reactionDiffusion.ts:251-281`](file:///Users/mey/BioGenesis/src/utils/reactionDiffusion.ts#L251-L281), `GrayScott2D.toTexture()` and `toEmissiveTexture()` instantiate new `THREE.DataTexture` objects for bioluminescent hull patterns. When `generateBioluminescentTextures()` runs in `updateMaterials()`, the previous `emissiveMap` and `map` DataTextures are orphaned without calling `texture.dispose()`.
+The old material object references in `materialsRef.current` are overwritten without calling `oldMat.dispose()`. Furthermore, in [`reactionDiffusion.ts:251-281`](../../src/utils/reactionDiffusion.ts#L251-L281), `GrayScott2D.toTexture()` and `toEmissiveTexture()` instantiate new `THREE.DataTexture` objects for bioluminescent hull patterns. When `generateBioluminescentTextures()` runs in `updateMaterials()`, the previous `emissiveMap` and `map` DataTextures are orphaned without calling `texture.dispose()`.
 
 #### C. Canvas Unmount Deficiencies
-In [`Canvas3D.tsx:5370-5376`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5370-L5376), component unmounting disposes the WebGL renderer (`rendererRef.current.dispose()`), but fails to traverse `sceneRef.current` to dispose geometries, materials, and textures, fails to call `controlsRef.current.dispose()`, and leaves active procedural textures allocated.
+In [`Canvas3D.tsx:5370-5376`](../../src/components/Canvas3D.tsx#L5370-L5376), component unmounting disposes the WebGL renderer (`rendererRef.current.dispose()`), but fails to traverse `sceneRef.current` to dispose geometries, materials, and textures, fails to call `controlsRef.current.dispose()`, and leaves active procedural textures allocated.
 
 #### D. Missing `VRAMLeakAuditor` Telemetry Instrumentation
 `AAA_QA_AUTOMATION_AND_TELEMETRY_SPEC.md` §3 specifies `VRAMLeakAuditor` to track `renderer.info.memory.geometries` and `textures`. However, no production class exists in `src/`.
@@ -183,7 +183,7 @@ export class VRAMLeakAuditor {
 ### 2.1 Hole Identification & Code Interrogation
 
 #### A. Helper Detachment Without Control Disposal
-In [`Canvas3D.tsx:334-338`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L334-L338):
+In [`Canvas3D.tsx:334-338`](../../src/components/Canvas3D.tsx#L334-L338):
 
 ```typescript
 // Canvas3D.tsx (Current Code - Lines 334-338)
@@ -196,11 +196,11 @@ if (transformControlsRef.current) {
 
 **Architectural Hole**:
 1. In Three.js version `0.185+`, `TransformControls` inherits from `Controls` (not `Object3D`). The visual gizmo mesh is held by `tc.getHelper()`. Detaching `tc` sets internal object reference to `null`, but if `buildSpaceship()` removes children while `tc` is in the middle of a drag event, `tc.object` points to a detached mesh node.
-2. The render loop defensive guard ([`Canvas3D.tsx:5770-5775`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5770-L5775)) checks `(tc as any).object`. In three.js r185+, the property access path is `tc.object`. This causes type mismatch and fails to detach orphaned controls, spamming console errors:
+2. The render loop defensive guard ([`Canvas3D.tsx:5770-5775`](../../src/components/Canvas3D.tsx#L5770-L5775)) checks `(tc as any).object`. In three.js r185+, the property access path is `tc.object`. This causes type mismatch and fails to detach orphaned controls, spamming console errors:
    `"TransformControls: attached 3D object must be a part of the scene graph"`.
 
 #### B. Event Listener Accumulation
-Inside `useEffect` ([`Canvas3D.tsx:5812-5968`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5812-L5968)), event listeners for `change` and `dragging-changed` access mutable ref values. However, if `tc` is re-created without removing listeners or calling `tc.dispose()`, listeners remain attached to `renderer.domElement`, causing duplicate state mutations and memory leaks.
+Inside `useEffect` ([`Canvas3D.tsx:5812-5968`](../../src/components/Canvas3D.tsx#L5812-L5968)), event listeners for `change` and `dragging-changed` access mutable ref values. However, if `tc` is re-created without removing listeners or calling `tc.dispose()`, listeners remain attached to `renderer.domElement`, causing duplicate state mutations and memory leaks.
 
 ---
 
@@ -237,7 +237,7 @@ if (shipGroupRef.current) {
 ### 3.1 Hole Identification & Code Interrogation
 
 #### A. Dynamic Array Reallocations in Marching Cubes
-In [`marchingCubes.ts:378-445`](file:///Users/mey/BioGenesis/src/utils/marchingCubes.ts#L378-L445):
+In [`marchingCubes.ts:378-445`](../../src/utils/marchingCubes.ts#L378-L445):
 
 ```typescript
 // marchingCubes.ts (Current Code - Lines 378-379, 440-445)
@@ -260,7 +260,7 @@ indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
 5. This triggers V8 Major GC sweeps lasting $15\text{ms} - 45\text{ms}$, resulting in severe frame drops below 60 FPS ($16.67\text{ ms}$ budget).
 
 #### B. Unbounded `sdfGridPool` Memory Leak
-In [`sdf.ts:312-334`](file:///Users/mey/BioGenesis/src/utils/sdf.ts#L312-L334):
+In [`sdf.ts:312-334`](../../src/utils/sdf.ts#L312-L334):
 
 ```typescript
 // sdf.ts (Current Code - Lines 312-334)
@@ -527,15 +527,15 @@ export class WorkerPoolManager {
 ### 5.1 Hole Identification & Code Interrogation
 
 1. **`any` Type Casts in Organ & Event Handlers**:
-   - In [`Canvas3D.tsx:5820`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5820): `tc.addEventListener('dragging-changed', (event: any) => ...)`
-   - In [`Canvas3D.tsx:5837`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5837): `candidateOrgansRef.current.find((o: any) => ...)`
-   - In [`Canvas3D.tsx:5917, 5922`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L5917#L5922): `((state as any).appendageScale || 1.0)`, `((state as any).eyeStalkLength || 0)`
-   - In [`nerveBranching.ts:85`](file:///Users/mey/BioGenesis/src/utils/nerveBranching.ts#L85): `[key: string]: any;`
+   - In [`Canvas3D.tsx:5820`](../../src/components/Canvas3D.tsx#L5820): `tc.addEventListener('dragging-changed', (event: any) => ...)`
+   - In [`Canvas3D.tsx:5837`](../../src/components/Canvas3D.tsx#L5837): `candidateOrgansRef.current.find((o: any) => ...)`
+   - In [`Canvas3D.tsx:5917, 5922`](../../src/components/Canvas3D.tsx#L5917#L5922): `((state as any).appendageScale || 1.0)`, `((state as any).eyeStalkLength || 0)`
+   - In [`nerveBranching.ts:85`](../../src/utils/nerveBranching.ts#L85): `[key: string]: any;`
 
    **Architectural Hole**: Using `any` bypasses static type verification. Renaming properties in `GeneticsState` or organ definitions will compile without errors, but fail silently at runtime, producing `NaN` coordinate vectors.
 
 2. **Weakly Typed Organ Extra Metadata**:
-   In `CandidateOrgan` ([`Canvas3D.tsx:1567`](file:///Users/mey/BioGenesis/src/components/Canvas3D.tsx#L1567)), `extra?: any` is used instead of a discriminated union interface.
+   In `CandidateOrgan` ([`Canvas3D.tsx:1567`](../../src/components/Canvas3D.tsx#L1567)), `extra?: any` is used instead of a discriminated union interface.
 
 ---
 
@@ -608,7 +608,7 @@ export type TypedCandidateOrgan =
 
 ### 6.1 Hole Identification & Code Interrogation
 
-In [`src/utils/exporter.ts`](file:///Users/mey/BioGenesis/src/utils/exporter.ts), GLTF exporting and async texture loaders perform asynchronous operations without wrapping calls in `try...catch` blocks or attaching `.catch()` handlers:
+In [`src/utils/exporter.ts`](../../src/utils/exporter.ts), GLTF exporting and async texture loaders perform asynchronous operations without wrapping calls in `try...catch` blocks or attaching `.catch()` handlers:
 
 ```typescript
 // exporter.ts (Current Risk Area)

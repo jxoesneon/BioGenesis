@@ -490,7 +490,7 @@ Before synthesizing 3D geometry from mutated chromosomes, the phenotype must pas
 To verify that the procedural biology, SDF compositions, blending rules, and synthesis modules compile cleanly without type errors or broken dependencies, run the static gate check from the BioGenesis root:
 
 ```bash
-cd /Users/mey/BioGenesis
+cd BioGenesis
 npx tsc --noEmit
 npm run build
 ```
