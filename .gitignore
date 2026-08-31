@@ -23,5 +23,15 @@ AGENTS.md
 # IDE
 .vscode/
 
-# Screenshots
+# Screenshots & debug captures
 biogenesis-*.png
+nose-*.png
+engineering-*.png
+tools-test.png
+*-crop.png
+*-area.png
+*-fixed.png
+*-view.png
+
+# Stray non-project scripts
+scripts/test_galaxy_map_zoom.gd
